@@ -280,3 +280,4 @@ pyinstaller KVault.spec
 5. **模型名称解析**：自动匹配短名称与完整模型路径，增强兼容性。
 6. **文档同步**：补充 `docs/backup-and-migration.md`「模型变更处理」章节，README 同步添加相关指引。
 7. **配置文件路径固定**：`config.json` 的加载与保存均解析为应用根目录的绝对路径，避免从不同目录启动时数据目录漂移导致的数据丢失。
+8. **MCP 服务启动修复**：修复 `FastMCP.run()` 不支持 `port` 参数导致的 `TypeError`，SSE 模式通过 `mcp.settings.port` 设置端口。

@@ -67,7 +67,9 @@ def main():
     )
     args = parser.parse_args()
 
-    mcp.run(transport=args.transport, port=args.port)
+    if args.transport == "sse":
+        mcp.settings.port = args.port
+    mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":
