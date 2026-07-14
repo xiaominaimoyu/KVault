@@ -1,0 +1,11 @@
+{
+  "files_dir": "./data/files",
+  "chroma_dir": "./data/chroma_db",
+  "sqlite_path": "./data/kb.sqlite",
+  "chunk_size": 500,
+  "chunk_overlap": 100,
+  "embedding_model": "bge-large-zh-v1.5",
+  "ollama_base_url": "http://localhost:11434",
+  "top_k": 5,
+  "similarity_threshold": 0.5
+}
