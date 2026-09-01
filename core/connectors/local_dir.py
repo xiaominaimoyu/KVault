@@ -28,7 +28,7 @@ class LocalDirConnector(BaseConnector):
                 continue
             if self._extensions and p.suffix.lower() not in self._extensions:
                 continue
-            result.append(str(p.relative_to(self._dir)))
+            result.append(p.relative_to(self._dir).as_posix())
         return result
 
     def fetch(self, source_id: str) -> ConnectorDoc:
