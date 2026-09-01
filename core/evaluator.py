@@ -242,3 +242,51 @@ class RetrievalEvaluator:
             sample_results=sample_results,
             top_k=top_k,
         )
+
+    @staticmethod
+    def save_report(report: EvalReport, path: str | Path) -> None:
+        """将报告保存为机器可读 JSON。"""
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "name": report.name,
+            "top_k": report.top_k,
+            "total_samples": report.total_samples,
+            "hit_samples": report.hit_samples,
+            "avg_recall_at_k": {str(k): v for k, v in report.avg_recall_at_k.items()},
+            "avg_mrr": report.avg_mrr,
+            "sample_results": [
+                {
+                    "query": sr.query,
+                    "hit_doc_ids": sr.hit_doc_ids,
+                    "hit_ranks": sr.hit_ranks,
+                    "recall_at_k": {str(k): v for k, v in sr.recall_at_k.items()},
+                    "mrr": sr.mrr,
+                    "expected_count": sr.expected_count,
+                    "retrieved_count": sr.retrieved_count,
+                }
+                for sr in report.sample_results
+            ],
+        }
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    @staticmethod
+    def print_report(report: EvalReport) -> None:
+        """打印人类可读的控制台报告。"""
+        print(f"\n{'=' * 60}")
+        print(f"  评测报告: {report.name}")
+        print(f"{'=' * 60}")
+        print(f"  样本总数: {report.total_samples}  命中样本: {report.hit_samples}")
+        print(f"  Top-K: {report.top_k}")
+        print(f"{'-' * 60}")
+        print("  Recall@K:")
+        for k, v in sorted(report.avg_recall_at_k.items()):
+            print(f"    Recall@{k:<3} = {v:.4f}")
+        print(f"  MRR     = {report.avg_mrr:.4f}")
+        print(f"{'-' * 60}")
+        print("  逐条明细:")
+        for i, sr in enumerate(report.sample_results, start=1):
+            hit_flag = "✓" if sr.hit_doc_ids else "✗"
+            ranks = sr.hit_ranks if sr.hit_ranks else "—"
+            print(f"    [{i}] {hit_flag}  query={sr.query[:40]!r}  ranks={ranks}  mrr={sr.mrr:.3f}")
+        print(f"{'=' * 60}\n")
