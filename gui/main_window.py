@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextBrowser,
@@ -229,11 +230,49 @@ class SettingsDialog(QDialog):
         self.data_dir.setReadOnly(True)
         layout.addRow("数据目录", self.data_dir)
 
-        self.ollama_url = QLineEdit(config.ollama_base_url)
-        layout.addRow("Ollama Base URL", self.ollama_url)
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem("Ollama", "ollama")
+        self.backend_combo.addItem("llama.cpp", "llama_cpp")
+        backend_idx = self.backend_combo.findData(config.embedding_backend)
+        if backend_idx >= 0:
+            self.backend_combo.setCurrentIndex(backend_idx)
+        layout.addRow("嵌入后端", self.backend_combo)
 
+        self.config_stack = QStackedWidget()
+
+        ollama_panel = QWidget()
+        ollama_layout = QFormLayout(ollama_panel)
+        self.ollama_url = QLineEdit(config.ollama_base_url)
+        ollama_layout.addRow("Base URL", self.ollama_url)
         self.model_name = QLineEdit(config.embedding_model)
-        layout.addRow("Embedding 模型", self.model_name)
+        ollama_layout.addRow("模型名", self.model_name)
+        self.config_stack.addWidget(ollama_panel)
+
+        llama_cpp_panel = QWidget()
+        llama_cpp_layout = QFormLayout(llama_cpp_panel)
+        gguf_layout = QHBoxLayout()
+        self.gguf_path = QLineEdit(config.llama_cpp.model_path)
+        gguf_layout.addWidget(self.gguf_path)
+        self.gguf_browse_btn = QPushButton("浏览...")
+        self.gguf_browse_btn.clicked.connect(self._on_gguf_browse)
+        gguf_layout.addWidget(self.gguf_browse_btn)
+        llama_cpp_layout.addRow("GGUF 模型", gguf_layout)
+        self.n_gpu_layers = QSpinBox()
+        self.n_gpu_layers.setRange(0, 100)
+        self.n_gpu_layers.setValue(config.llama_cpp.n_gpu_layers)
+        llama_cpp_layout.addRow("GPU 层数", self.n_gpu_layers)
+        self.n_ctx = QSpinBox()
+        self.n_ctx.setRange(512, 65536)
+        self.n_ctx.setValue(config.llama_cpp.n_ctx)
+        llama_cpp_layout.addRow("上下文长度", self.n_ctx)
+        self.config_stack.addWidget(llama_cpp_panel)
+
+        layout.addRow(self.config_stack)
+        self.backend_combo.currentIndexChanged.connect(self._on_backend_changed)
+
+        self.backend_status_label = QLabel()
+        self.backend_status_label.setStyleSheet("font-size: 11px;")
+        layout.addRow("后端状态", self.backend_status_label)
 
         self.chunk_size = QSpinBox()
         self.chunk_size.setRange(100, 4000)
@@ -288,6 +327,32 @@ class SettingsDialog(QDialog):
         )
         dialog.exec()
 
+    def _on_gguf_browse(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择 GGUF 模型", "", "GGUF Models (*.gguf);;All Files (*.*)"
+        )
+        if path:
+            self.gguf_path.setText(path)
+
+    def _on_backend_changed(self, index: int):
+        self.config_stack.setCurrentIndex(index)
+        backend = self.backend_combo.itemData(index)
+        if backend == "llama_cpp":
+            from core.embedding_backends.llama_cpp_backend import LlamaCppBackend
+            tmp = LlamaCppBackend(model_path=self.gguf_path.text().strip())
+            if tmp.is_available() and tmp.is_model_available():
+                self.backend_status_label.setText("✓ llama.cpp 后端就绪")
+                self.backend_status_label.setStyleSheet("color: green; font-size: 11px;")
+            elif not tmp.is_available():
+                self.backend_status_label.setText("✗ 未安装 llama-cpp-python")
+                self.backend_status_label.setStyleSheet("color: red; font-size: 11px;")
+            else:
+                self.backend_status_label.setText("✗ GGUF 模型文件不存在")
+                self.backend_status_label.setStyleSheet("color: red; font-size: 11px;")
+        else:
+            self.backend_status_label.setText("Ollama 后端（需启动 Ollama 服务）")
+            self.backend_status_label.setStyleSheet("color: gray; font-size: 11px;")
+
     def _on_mcp_toggled(self, checked: bool):
         self.mcp_enabled.setText("已启用" if checked else "已禁用")
 
@@ -303,6 +368,11 @@ class SettingsDialog(QDialog):
 
         self.config.ollama_base_url = self.ollama_url.text().strip()
         self.config.embedding_model = self.model_name.text().strip()
+        self.config.embedding_backend = self.backend_combo.currentData()
+        if self.config.embedding_backend == "llama_cpp":
+            self.config.llama_cpp.model_path = self.gguf_path.text().strip()
+            self.config.llama_cpp.n_gpu_layers = self.n_gpu_layers.value()
+            self.config.llama_cpp.n_ctx = self.n_ctx.value()
         self.config.chunk_size = self.chunk_size.value()
         self.config.chunk_overlap = self.chunk_overlap.value()
         self.config.top_k = self.top_k.value()
@@ -341,11 +411,7 @@ class MainWindow(QMainWindow):
         current_ws = self._workspace_manager.get_current()
         self.vector_store = VectorStore(str(current_ws.chroma_dir))
         self.metadata = MetadataManager(str(current_ws.sqlite_path), vector_store=self.vector_store)
-        self.embedder = EmbeddingService(
-            model=config.embedding_model,
-            base_url=config.ollama_base_url,
-            batch_size=config.embedding_batch_size,
-        )
+        self.embedder = self._build_embedder(config)
 
         self._current_doc_id: str | None = None
         self._current_partition_id: str | None = None
@@ -1079,25 +1145,31 @@ class MainWindow(QMainWindow):
         self._reload_all()
 
     def _open_settings(self):
+        old_backend = self.config.embedding_backend
         dialog = SettingsDialog(self.config, self)
         if dialog.exec() == QDialog.Accepted:
             self.splitter = KnowledgeTextSplitter(
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap,
             )
-            self.embedder = EmbeddingService(
-                model=self.config.embedding_model,
-                base_url=self.config.ollama_base_url,
-                batch_size=self.config.embedding_batch_size,
-            )
+            self.embedder = self._build_embedder(self.config)
             self.retriever = Retriever(
                 embedder=self.embedder,
                 vector_store=self.vector_store,
                 metadata=self.metadata,
                 config=self.config,
             )
+            if old_backend != self.config.embedding_backend:
+                QMessageBox.information(
+                    self, "后端已切换",
+                    f"嵌入后端已从 {old_backend} 切换至 {self.config.embedding_backend}。\n"
+                    "注意：后端切换可能改变向量维度，如检索异常请重建索引。",
+                )
             self._check_environment()
             self._refresh_status_panel()
+
+    def _build_embedder(self, config: Config) -> EmbeddingService:
+        return EmbeddingService(config=config)
 
     def _open_logs_dir(self):
         path = self.config.logs_dir
