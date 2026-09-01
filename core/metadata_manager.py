@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from core.schema_migrator import SchemaMigrator
+
 DEFAULT_PARTITION_NAME = "全部文档"
 DEFAULT_PARTITION_ID = uuid.uuid5(uuid.NAMESPACE_DNS, "kvault.partition.default").hex
 DEFAULT_PARTITIONS = [DEFAULT_PARTITION_NAME, "技术笔记", "项目资料", "阅读笔记", "灵感收藏"]
@@ -93,6 +95,7 @@ class MetadataManager:
         with self._conn() as conn:
             conn.executescript(SCHEMA)
             self._ensure_default_partitions(conn)
+        SchemaMigrator(self.db_path).migrate()
 
     def _ensure_default_partitions(self, conn: sqlite3.Connection):
         name_to_id: dict[str, str] = {DEFAULT_PARTITION_NAME: DEFAULT_PARTITION_ID}
@@ -512,3 +515,19 @@ class MetadataManager:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    # ---------- 索引元数据 ----------
+
+    def get_index_meta(self, key: str) -> Optional[str]:
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT value FROM index_meta WHERE key = ?", (key,)
+            ).fetchone()
+        return row["value"] if row else None
+
+    def set_index_meta(self, key: str, value: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)",
+                (key, value),
+            )
