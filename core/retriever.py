@@ -1,9 +1,13 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from core.config import Config
 from core.embedding_service import EmbeddingService
 from core.metadata_manager import MetadataManager
 from core.vector_store import VectorStore
+
+if TYPE_CHECKING:
+    from core.model_manager import ModelManager
 
 
 @dataclass
@@ -24,11 +28,13 @@ class Retriever:
         vector_store: VectorStore,
         metadata: MetadataManager,
         config: Config,
+        model_manager: "ModelManager | None" = None,
     ):
         self.embedder = embedder
         self.vector_store = vector_store
         self.metadata = metadata
         self.config = config
+        self.model_manager = model_manager
 
     def search(
         self,
@@ -38,6 +44,12 @@ class Retriever:
     ) -> list[SearchResult]:
         if not query or not query.strip():
             return []
+
+        if self.model_manager is not None:
+            consistent, msg = self.model_manager.check_consistency()
+            if not consistent:
+                from core.model_manager import ModelMismatchError
+                raise ModelMismatchError(msg)
 
         top_k = top_k or self.config.top_k
         query_embedding = self.embedder.embed_query(query.strip())
