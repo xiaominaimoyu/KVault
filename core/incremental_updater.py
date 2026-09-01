@@ -99,3 +99,93 @@ class IncrementalUpdater:
                 report.deleted.append(stored_path)
 
         return report
+
+    def update(
+        self,
+        report: DiffReport,
+        progress_cb: Callable[[str, str], None] | None = None,
+    ) -> UpdateResult:
+        """处理新增/修改/删除三类文档。
+
+        Args:
+            report: scan_diffs 返回的差异清单。
+            progress_cb: 进度回调 (stored_path, status)。
+        """
+        from core.ingest import ingest_document
+
+        result = UpdateResult()
+
+        for stored in report.deleted:
+            try:
+                doc_map = self.metadata.list_all_fingerprints()
+                for doc_id, fp in doc_map.items():
+                    if fp["stored_path"] == stored:
+                        self.metadata.delete_document(doc_id)
+                        break
+                if progress_cb:
+                    progress_cb(stored, "deleted")
+            except Exception as e:
+                logger.warning("删除失败 %s: %s", stored, e)
+                result.fail_count += 1
+
+        for stored in report.added + report.modified:
+            try:
+                ingest_document(
+                    file_path=stored,
+                    config=self.config,
+                    parser=self.parser,
+                    splitter=self.splitter,
+                    embedder=self.embedder,
+                    vector_store=self.vector_store,
+                    metadata=self.metadata,
+                )
+                result.success_count += 1
+                if progress_cb:
+                    progress_cb(stored, "indexed")
+            except Exception as e:
+                logger.warning("索引失败 %s: %s", stored, e)
+                result.fail_count += 1
+                result.dirty_doc_ids.append(stored)
+                if progress_cb:
+                    progress_cb(stored, f"failed: {e}")
+
+        return result
+
+    def rebuild_all(
+        self, progress_cb: Callable[[str, str], None] | None = None
+    ) -> UpdateResult:
+        """全量重建：删除所有文档后重新索引 files_dir 中的全部文件。"""
+        from core.ingest import ingest_document
+
+        result = UpdateResult()
+        for doc in self.metadata.list_documents():
+            self.metadata.delete_document(doc.id)
+
+        files_dir = self.config.files_dir
+        if not files_dir.exists():
+            return result
+
+        for p in files_dir.iterdir():
+            if p.is_dir():
+                continue
+            try:
+                ingest_document(
+                    file_path=str(p),
+                    config=self.config,
+                    parser=self.parser,
+                    splitter=self.splitter,
+                    embedder=self.embedder,
+                    vector_store=self.vector_store,
+                    metadata=self.metadata,
+                )
+                result.success_count += 1
+                if progress_cb:
+                    progress_cb(str(p), "indexed")
+            except Exception as e:
+                logger.warning("重建失败 %s: %s", p, e)
+                result.fail_count += 1
+                result.dirty_doc_ids.append(str(p))
+                if progress_cb:
+                    progress_cb(str(p), f"failed: {e}")
+
+        return result
