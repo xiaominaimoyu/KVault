@@ -1,6 +1,10 @@
 from pathlib import Path
 from dataclasses import dataclass
+import logging
 
+from core.optional_deps import OptionalDepDetector
+
+logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE = 512 * 1024 * 1024  # 512 MB
 
@@ -12,7 +16,7 @@ class ParsedDocument:
 
 
 class DocumentParser:
-    SUPPORTED = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx"}
+    SUPPORTED = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".pptx", ".png", ".jpg", ".jpeg"}
 
     def parse(self, file_path: str) -> ParsedDocument:
         path = Path(file_path)
@@ -40,6 +44,9 @@ class DocumentParser:
             ".docx": self._parse_docx,
             ".xlsx": self._parse_xlsx,
             ".pptx": self._parse_pptx,
+            ".png": self._parse_image,
+            ".jpg": self._parse_image,
+            ".jpeg": self._parse_image,
         }.get(ext)
 
     def _parse_txt(self, path: str) -> ParsedDocument:
@@ -47,10 +54,53 @@ class DocumentParser:
         return ParsedDocument(text, {"source": path})
 
     def _parse_pdf(self, path: str) -> ParsedDocument:
+        if OptionalDepDetector.has_pdfplumber():
+            try:
+                return self._parse_pdf_with_tables(path)
+            except Exception as e:
+                logger.warning("pdfplumber 表格提取失败，降级为纯文本: %s", e)
+        return self._parse_pdf_plain(path)
+
+    def _parse_pdf_with_tables(self, path: str) -> ParsedDocument:
+        import pdfplumber
+        lines: list[str] = []
+        page_count = 0
+        with pdfplumber.open(path) as pdf:
+            page_count = len(pdf.pages)
+            for i, page in enumerate(pdf.pages, start=1):
+                lines.append(f"[Page {i}]")
+                text = page.extract_text() or ""
+                if text:
+                    lines.append(text)
+                for table in page.extract_tables():
+                    lines.append("[Table]")
+                    for row in table:
+                        row_text = " | ".join(str(c) for c in row if c is not None)
+                        if row_text.strip():
+                            lines.append(row_text)
+        return ParsedDocument("\n".join(lines), {"source": path, "pages": page_count})
+
+    def _parse_pdf_plain(self, path: str) -> ParsedDocument:
         import fitz
         with fitz.open(path) as doc:
             text = "\n".join(page.get_text() for page in doc)
             return ParsedDocument(text, {"source": path, "pages": doc.page_count})
+
+    def _parse_image(self, path: str) -> ParsedDocument:
+        if not OptionalDepDetector.has_rapidocr():
+            logger.warning("未安装 RapidOCR，跳过图片 OCR: %s", path)
+            return ParsedDocument("", {"source": path, "ocr": "skipped"})
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            engine = RapidOCR()
+            result, _ = engine(path)
+            if result is None:
+                return ParsedDocument("", {"source": path, "ocr": "empty"})
+            lines = [item[1] for item in result if item and item[1]]
+            return ParsedDocument("\n".join(lines), {"source": path, "ocr": "rapidocr"})
+        except Exception as e:
+            logger.warning("RapidOCR 解析失败: %s", e)
+            return ParsedDocument("", {"source": path, "ocr": f"failed: {e}"})
 
     def _parse_docx(self, path: str) -> ParsedDocument:
         from docx import Document
