@@ -15,6 +15,7 @@ numpy>=1.26.0
 # pdfplumber>=0.11.0      # PDF 表格结构化提取（缺失时降级为 PyMuPDF 纯文本）
 # rapidocr-onnxruntime>=1.3.0  # 图片 OCR（缺失时跳过 PNG/JPG/JPEG 文字识别）
 # jieba>=0.42.1           # 中文分词（缺失时 BM25 混合检索降级为纯字串匹配）
+# llama-cpp-python>=0.3.0  # llama.cpp 本地嵌入后端（缺失时该后端不可用，Ollama 后端不受影响）
 
 # Dev / test
 pytest>=8.0.0
