@@ -6,7 +6,7 @@ KVault 是一款面向个人的本地化知识库桌面应用，基于 **PySide6
 
 ## 功能特性
 
-- **多格式文档导入**：支持 TXT、Markdown、PDF、DOCX、XLSX、PPTX。
+- **多格式文档导入**：支持 TXT、Markdown、PDF、DOCX、XLSX、PPTX，以及 PNG/JPG/JPEG 图片（需可选依赖 RapidOCR）。
 - **自动解析与切分**：提取文本内容并按配置切分为语义块。
 - **本地向量索引**：使用 ChromaDB 持久化存储文本嵌入向量。
 - **语义检索**：输入自然语言即可查找相关文档片段，并按相似度排序。
@@ -69,6 +69,16 @@ KVault 采用四层架构：
    ```bash
    ollama pull modelscope.cn/Embedding-GGUF/bge-large-zh-v1.5:latest
    ```
+
+### 可选依赖
+
+以下依赖不在 `requirements.txt` 的强制项中，按需安装以启用增强能力。未安装时应用正常运行，仅对应能力降级。
+
+| 依赖 | 安装命令 | 启用能力 | 缺失时降级行为 |
+|------|---------|---------|---------------|
+| `pdfplumber` | `pip install pdfplumber` | PDF 表格结构化提取（保留表格行列结构） | 降级为 PyMuPDF 纯文本提取，表格以普通文本呈现 |
+| `rapidocr-onnxruntime` | `pip install rapidocr-onnxruntime` | PNG/JPG/JPEG 图片 OCR 文字识别 | 跳过图片文字识别，图片内容为空并记录 `ocr: skipped` |
+| `jieba` | `pip install jieba` | 中文分词，驱动 BM25 混合检索 | 混合检索降级为纯字串匹配，召回质量略降 |
 
 ---
 
@@ -205,7 +215,8 @@ async with stdio_client(server_params) as (read, write):
 - LangChain / langchain-text-splitters
 - ChromaDB
 - Ollama
-- python-docx / PyPDF2 / openpyxl / python-pptx
+- python-docx / PyMuPDF / openpyxl / python-pptx
+- pdfplumber / rapidocr-onnxruntime / jieba（可选，见「可选依赖」）
 - SQLite
 - python-multipart (MCP)
 
