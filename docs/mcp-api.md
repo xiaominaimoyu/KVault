@@ -21,6 +21,7 @@ KVault 通过 Model Context Protocol (MCP) 向外部 AI 代理暴露知识库检
 |------|------|
 | `CHROMA_PATH` | 覆盖 ChromaDB 数据目录 |
 | `DB_PATH` | 覆盖 SQLite 数据库路径 |
+| `WORKSPACE` | 默认工作区 ID（不传 workspace 参数时使用） |
 
 ## 工具列表
 
@@ -36,6 +37,7 @@ KVault 通过 Model Context Protocol (MCP) 向外部 AI 代理暴露知识库检
 | top_k | int | 否 | 返回结果数量，默认 5，范围 1-50 |
 | partition_filter | string | 否 | 按分区名称过滤 |
 | tag_filters | list[string] | 否 | 按标签名称过滤，命中任意标签即返回 |
+| workspace | string | 否 | 工作区 ID，不传时使用默认工作区 |
 
 **返回结构**:
 
@@ -60,13 +62,18 @@ KVault 通过 Model Context Protocol (MCP) 向外部 AI 代理暴露知识库检
 { "error": "query 不能为空" }
 { "error": "服务初始化失败: ..." }
 { "error": "检索失败: ..." }
+{ "error": "workspace not found" }
 ```
 
 ### 2. list_knowledge_bases_tool
 
 **功能**: 列出所有分区及文档数量。
 
-**参数**: 无
+**参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| workspace | string | 否 | 工作区 ID，不传时使用默认工作区 |
 
 **返回结构**:
 
@@ -98,6 +105,7 @@ KVault 通过 Model Context Protocol (MCP) 向外部 AI 代理暴露知识库检
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | document_id | string | 是 | 文档 ID；也支持按文件名模糊匹配 |
+| workspace | string | 否 | 工作区 ID，不传时使用默认工作区 |
 
 **返回结构**:
 

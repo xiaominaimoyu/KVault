@@ -6,11 +6,26 @@ KVault 数据存储在以下目录结构中：
 
 ```
 data/
-├── kb.sqlite          # 元数据库
-├── chroma_db/         # 向量数据库
-├── files/             # 原始文档文件
-└── logs/              # 日志文件
+├── workspaces/
+│   ├── default/             # 默认工作区
+│   │   ├── kb.sqlite        # 元数据库
+│   │   ├── chroma_db/       # 向量数据库
+│   │   └── files/           # 原始文档文件
+│   ├── <ws_id>/             # 其他工作区
+│   │   ├── kb.sqlite
+│   │   ├── chroma_db/
+│   │   └── files/
+│   └── _archived/           # 已归档工作区
+│       └── <ws_id>/
+│           ├── kb.sqlite
+│           ├── chroma_db/
+│           └── files/
+└── logs/                    # 日志文件
 ```
+
+> **迁移说明**：旧版本数据目录为 `data/{kb.sqlite, chroma_db/, files/}`。
+> 首次启动新版本时，`WorkspaceManager.migrate_legacy_data()` 会自动将旧数据
+> 迁移到 `data/workspaces/default/`，迁移前备份到 `data/.migration_backup/`。
 
 ## 备份
 
