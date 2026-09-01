@@ -19,6 +19,8 @@ class SearchResult:
     score: float
     chunk_index: int
     metadata: dict
+    partition: str = ""
+    hit_source: str = "vector"
 
 
 class Retriever:
@@ -50,6 +52,16 @@ class Retriever:
             if not consistent:
                 from core.model_manager import ModelMismatchError
                 raise ModelMismatchError(msg)
+
+        if self.config.hybrid_search.enabled:
+            from core.hybrid_retriever import HybridRetriever
+            hybrid = HybridRetriever(
+                self.embedder, self.vector_store, self.metadata, self.config
+            )
+            results = hybrid.search(query, top_k=top_k, filters=filters)
+            for r in results:
+                r.hit_source = "hybrid"
+            return results
 
         top_k = top_k or self.config.top_k
         query_embedding = self.embedder.embed_query(query.strip())
