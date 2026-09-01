@@ -4,6 +4,7 @@ from pathlib import Path
 from core.config import Config
 from core.document_parser import DocumentParser
 from core.embedding_service import EmbeddingService
+from core.fingerprint import Fingerprint, FingerprintError
 from core.metadata_manager import DEFAULT_PARTITION_ID, MetadataManager
 from core.text_splitter import KnowledgeTextSplitter
 from core.vector_store import VectorStore
@@ -72,6 +73,13 @@ def ingest_document(
         ]
         metadata.add_chunks(doc_id, chunk_meta)
         metadata.update_status(doc_id, "indexed", chunk_count=len(chunks))
+
+        try:
+            fp = Fingerprint.compute(stored)
+            metadata.update_fingerprint(doc_id, fp.content_hash, fp.mtime)
+        except FingerprintError:
+            pass
+
         return doc_id
     except Exception as e:
         metadata.update_status(doc_id, "failed", error_message=str(e))
