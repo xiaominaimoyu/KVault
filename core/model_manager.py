@@ -65,9 +65,17 @@ class ModelManager:
         return ModelVersionInfo(model=model, dimension=dimension or 0, created_at=created_at)
 
     def get_config_version(self) -> ModelVersionInfo:
-        """从 config 读取当前配置的模型版本。"""
+        """从 config 读取当前配置的模型版本。
+
+        按后端类型取模型标识：ollama 用 embedding_model，
+        llama_cpp 用 GGUF 文件名。
+        """
+        if self.config.embedding_backend == "llama_cpp":
+            model_id = Path(self.config.llama_cpp.model_path).name if self.config.llama_cpp.model_path else ""
+        else:
+            model_id = self.config.embedding_model
         return ModelVersionInfo(
-            model=self.config.embedding_model,
+            model=model_id,
             dimension=self.config.last_index_dimension or 0,
             created_at=self.config.last_index_at,
         )
@@ -81,10 +89,10 @@ class ModelManager:
         indexed = self.get_indexed_version()
         if indexed is None:
             return True, "未知版本（旧索引未记录模型版本，建议切换模型或重建索引）"
-        current_model = self.config.embedding_model
-        if indexed.model != current_model:
+        current = self.get_config_version()
+        if indexed.model != current.model:
             return False, (
-                f"模型不一致：索引使用 '{indexed.model}'，当前配置为 '{current_model}'。"
+                f"模型不一致：索引使用 '{indexed.model}'，当前配置为 '{current.model}'。"
                 f"请通过设置页「切换模型」执行迁移，或参阅 docs/backup-and-migration.md"
             )
         return True, ""
@@ -193,6 +201,87 @@ class ModelManager:
             old = locals().get("old_model")
             if old is not None:
                 self.config.embedding_model = old
+            backup = locals().get("backup_path")
+            if backup:
+                notify("异常发生，执行回滚")
+                self.rollback(backup)
+                return SwitchResult(success=False, backup_path=backup, error=str(e), rolled_back=True)
+            return SwitchResult(success=False, backup_path=None, error=str(e))
+
+    def switch_backend(
+        self,
+        new_backend: str,
+        new_model_id: str,
+        rebuild_fn: Callable[[], None],
+        progress_cb: Callable[[str], None] | None = None,
+    ) -> SwitchResult:
+        """执行后端切换的备份→重建→校验→可回滚四步工作流。
+
+        复用 switch_model 的工作流，额外更新 config.embedding_backend
+        与对应模型标识字段（ollama 更新 embedding_model，llama_cpp 更新 llama_cpp.model_path）。
+
+        Args:
+            new_backend: 新后端类型（"ollama" 或 "llama_cpp"）。
+            new_model_id: 新模型标识。ollama 为模型名，llama_cpp 为 GGUF 文件路径。
+            rebuild_fn: 重建索引的回调（无参数，失败时抛异常）。
+            progress_cb: 进度回调（接收阶段描述字符串）。
+        """
+        def notify(msg: str) -> None:
+            logger.info(msg)
+            if progress_cb:
+                progress_cb(msg)
+
+        if new_backend == "llama_cpp":
+            expected_model_id = Path(new_model_id).name if new_model_id else ""
+        else:
+            expected_model_id = new_model_id
+
+        old_backend = self.config.embedding_backend
+        old_embedding_model = self.config.embedding_model
+        old_llama_cpp_model_path = self.config.llama_cpp.model_path
+
+        try:
+            notify("步骤 1/4: 备份当前索引")
+            backup_path = self._backup()
+
+            notify("步骤 2/4: 更新后端配置并重建索引")
+            self.config.embedding_backend = new_backend
+            if new_backend == "llama_cpp":
+                self.config.llama_cpp.model_path = new_model_id
+            else:
+                self.config.embedding_model = new_model_id
+            rebuild_fn()
+
+            notify("步骤 3/4: 校验新索引一致性")
+            indexed = self.get_indexed_version()
+            if indexed and indexed.model != expected_model_id:
+                notify("校验失败：新索引模型与预期不符，执行回滚")
+                self.config.embedding_backend = old_backend
+                self.config.embedding_model = old_embedding_model
+                self.config.llama_cpp.model_path = old_llama_cpp_model_path
+                self.rollback(backup_path)
+                return SwitchResult(
+                    success=False,
+                    backup_path=backup_path,
+                    error=f"校验失败：索引模型 '{indexed.model}' != '{expected_model_id}'",
+                    rolled_back=True,
+                )
+
+            notify("步骤 4/4: 持久化配置")
+            self.config.last_index_model = expected_model_id
+            self.config.last_index_at = time.time()
+            self.config.save()
+            self.metadata.set_index_meta("embedding_model", expected_model_id)
+            if indexed:
+                self.metadata.set_index_meta("dimension", str(indexed.dimension))
+
+            return SwitchResult(success=True, backup_path=backup_path)
+
+        except Exception as e:
+            logger.exception("后端切换失败")
+            self.config.embedding_backend = old_backend
+            self.config.embedding_model = old_embedding_model
+            self.config.llama_cpp.model_path = old_llama_cpp_model_path
             backup = locals().get("backup_path")
             if backup:
                 notify("异常发生，执行回滚")
