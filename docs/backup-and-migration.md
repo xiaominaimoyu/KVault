@@ -221,3 +221,29 @@ KVault 使用 Ollama 提供的 Embedding 模型将文本转换为向量，并存
 - **不要混用向量**：同一 `chroma_db/` 目录下不要尝试同时存储两个模型的向量。
 - **不要只改配置不清索引**：修改 `embedding_model` 后若未删除旧 `chroma_db/`，检索时会出现维度不匹配或相似度计算错误。
 - **重新索引会耗时**：大文档集重新生成嵌入需要一定时间，建议在非工作时段执行。
+
+## 后端切换迁移
+
+KVault 支持两种嵌入后端：**Ollama**（默认，进程外 HTTP 调用）与 **llama.cpp**（进程内加载 GGUF 模型）。两种后端的向量空间通常不兼容，后端切换视为模型变更，须通过 P0-3 工作流重建索引。
+
+### 切换流程
+
+后端切换通过 `ModelManager.switch_backend(new_backend, new_model_id, rebuild_fn)` 执行，复用 `switch_model` 的备份→重建→校验→可回滚四步工作流：
+
+1. **备份**：自动备份当前 `chroma_db/` + `config.json` + `kb.sqlite` 到 `data/backups/<timestamp>/`
+2. **更新配置并重建**：更新 `config.embedding_backend` 与对应模型标识字段（Ollama 更新 `embedding_model`，llama.cpp 更新 `llama_cpp.model_path`），然后调用 `rebuild_fn` 重建索引
+3. **校验**：比对新索引的模型标识与预期值，不一致则自动回滚
+4. **持久化**：保存 `embedding_backend`、`last_index_model`、`last_index_at` 到 `config.json` 与 SQLite `index_meta`
+
+### 模型标识取值
+
+- **Ollama 后端**：模型标识为 `config.embedding_model`（如 `bge-large-zh-v1.5`）
+- **llama.cpp 后端**：模型标识为 GGUF 文件名（如 `bge-large-zh-v1.5.gguf`）
+
+`ModelManager.get_config_version()` 按当前后端类型自动取值，`check_consistency()` 据此检测后端切换后的模型标识变化并阻止检索。
+
+### 注意事项
+
+- **维度变化须重建索引**：Ollama 与 llama.cpp 向量空间不兼容，禁止静默混用。切换后端时若当前索引非空，系统会提示「后端切换可能改变向量维度，须重建索引」
+- **切换前校验可用性**：系统须先校验新后端可用（llama.cpp 须已安装 `llama-cpp-python` 且 GGUF 文件可读），不可用时阻止切换并保留旧索引
+- **回滚保护**：切换失败时自动回滚 `embedding_backend` 与模型标识字段，并恢复备份的 `chroma_db/` + `kb.sqlite`

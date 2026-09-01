@@ -101,6 +101,7 @@ KVault/
 | PDF 解析 | PyMuPDF | latest |
 | Office 解析 | python-docx / openpyxl / python-pptx | latest |
 | Embedding | Ollama + bge-large-zh-v1.5 (1024 dim) | latest |
+| Embedding 后端 | llama.cpp（进程内加载 GGUF，可选依赖） | latest |
 | 向量库 | ChromaDB | ≥ 0.4 |
 | 元数据 | SQLite | 内置 |
 | 对外协议 | MCP (JSON-RPC 2.0) | ≥ 1.0 |
