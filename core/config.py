@@ -1,7 +1,8 @@
 import json
 import os
 import sys
-from dataclasses import dataclass, asdict
+import time
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
 
@@ -20,6 +21,9 @@ class Config:
     similarity_threshold: float = 0.5
     mcp_enabled: bool = False
     theme: str = "system"
+    last_index_model: str | None = None
+    last_index_dimension: int | None = None
+    last_index_at: float | None = None
 
     def validate(self) -> list[str]:
         """Validate config fields and return a list of error messages.
