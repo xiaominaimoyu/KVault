@@ -1,0 +1,497 @@
+/* KVault Vault Standard — 深色主题 QSS 模板
+   所有色值/尺寸通过占位符引用 variables.py 中的 Token。
+   禁止硬编码色值。 */
+
+/* === 全局 === */
+QMainWindow {
+    background-color: %(bg-vault)s;
+}
+
+QWidget {
+    background-color: %(bg-vault)s;
+    color: %(fg-primary)s;
+    font-family: "Inter", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 14px;
+}
+
+QLabel {
+    background-color: transparent;
+    color: %(fg-primary)s;
+}
+
+/* === 按钮 === */
+QPushButton {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    min-height: 32px;
+}
+QPushButton:hover {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(accent-primary-dim)s;
+}
+QPushButton:pressed {
+    background-color: %(bg-inset)s;
+}
+QPushButton:disabled {
+    color: %(fg-muted)s;
+    background-color: %(bg-inset)s;
+    border: 1px solid %(fg-faint)s;
+}
+QPushButton[btnType="primary"] {
+    background-color: %(accent-primary)s;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-weight: 500;
+    min-height: 32px;
+}
+QPushButton[btnType="primary"]:hover {
+    background-color: %(accent-primary-hover)s;
+}
+QPushButton[btnType="primary"]:pressed {
+    background-color: %(accent-primary-dim)s;
+}
+QPushButton[btnType="primary"]:disabled {
+    background-color: %(fg-faint)s;
+    color: %(fg-muted)s;
+}
+QPushButton[btnType="secondary"] {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+}
+QPushButton[btnType="icon"] {
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    min-width: 32px;
+    min-height: 32px;
+    max-width: 32px;
+    max-height: 32px;
+    padding: 0px;
+}
+QPushButton[btnType="icon"]:hover {
+    background-color: %(bg-raised)s;
+}
+QPushButton[btnType="icon"]:pressed {
+    background-color: %(bg-inset)s;
+}
+QPushButton[btnType="danger"] {
+    background-color: %(status-error)s;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+}
+
+/* === 输入框 === */
+QLineEdit {
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-height: 32px;
+    font-size: 14px;
+    selection-background-color: %(accent-primary-dim)s;
+    selection-color: #FFFFFF;
+}
+QLineEdit:focus {
+    border: 1px solid %(accent-primary)s;
+}
+QLineEdit:disabled {
+    color: %(fg-muted)s;
+    background-color: %(bg-vault)s;
+}
+
+/* === 下拉选择器 === */
+QComboBox {
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-height: 32px;
+    font-size: 14px;
+}
+QComboBox:hover {
+    border: 1px solid %(accent-primary-dim)s;
+}
+QComboBox:focus {
+    border: 1px solid %(accent-primary)s;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 24px;
+}
+QComboBox::down-arrow {
+    width: 12px;
+    height: 12px;
+}
+QComboBox QAbstractItemView {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+    selection-background-color: %(accent-primary-dim)s;
+    selection-color: #FFFFFF;
+    outline: none;
+    padding: 4px;
+}
+
+/* === 表格 === */
+QTableWidget {
+    background-color: %(bg-vault)s;
+    color: %(fg-primary)s;
+    border: none;
+    gridline-color: transparent;
+    font-size: 14px;
+}
+QTableWidget::item {
+    padding: 8px 12px;
+    min-height: 40px;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+QTableWidget::item:hover {
+    background-color: %(bg-raised)s;
+}
+QTableWidget::item:selected {
+    background-color: rgba(45, 212, 191, 0.15);
+    border-left: 3px solid %(accent-primary)s;
+    color: %(fg-primary)s;
+}
+QHeaderView {
+    background-color: %(bg-surface)s;
+    border: none;
+}
+QHeaderView::section {
+    background-color: %(bg-surface)s;
+    color: %(fg-secondary)s;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 12px;
+    min-height: 36px;
+    border: none;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+QTableCornerButton::section {
+    background-color: %(bg-surface)s;
+    border: none;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+
+/* === 树形控件 === */
+QTreeWidget {
+    background-color: %(bg-surface)s;
+    color: %(fg-primary)s;
+    border: none;
+    font-size: 13px;
+    outline: none;
+}
+QTreeWidget::item {
+    min-height: 32px;
+    padding: 4px 8px;
+    border: none;
+}
+QTreeWidget::item:hover {
+    background-color: %(bg-raised)s;
+}
+QTreeWidget::item:selected {
+    background-color: rgba(45, 212, 191, 0.15);
+    border-left: 3px solid %(accent-primary)s;
+    color: %(fg-primary)s;
+}
+QTreeWidget::branch:has-siblings:!adjoins-item {
+    background-image: none;
+}
+QTreeWidget::branch:has-siblings:adjoins-item {
+    background-image: none;
+}
+QTreeWidget::branch:!has-children:!has-siblings:adjoins-item {
+    background-image: none;
+}
+QTreeWidget::branch:closed:has-children {
+    background-image: none;
+}
+QTreeWidget::branch:open:has-children {
+    background-image: none;
+}
+
+/* === 列表控件 === */
+QListWidget {
+    background-color: %(bg-surface)s;
+    color: %(fg-primary)s;
+    border: none;
+    font-size: 13px;
+    outline: none;
+}
+QListWidget::item {
+    min-height: 32px;
+    padding: 4px 8px;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+QListWidget::item:hover {
+    background-color: %(bg-raised)s;
+}
+QListWidget::item:selected {
+    background-color: rgba(45, 212, 191, 0.15);
+    border-left: 3px solid %(accent-primary)s;
+    color: %(fg-primary)s;
+}
+
+/* === 标签页 === */
+QTabWidget::pane {
+    background-color: %(bg-vault)s;
+    border: none;
+    border-top: 1px solid %(fg-faint)s;
+}
+QTabBar::tab {
+    background-color: %(bg-surface)s;
+    color: %(fg-secondary)s;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    min-height: 36px;
+}
+QTabBar::tab:hover {
+    color: %(fg-primary)s;
+}
+QTabBar::tab:selected {
+    color: %(fg-primary)s;
+    border-bottom: 2px solid %(accent-primary)s;
+}
+
+/* === 进度条 === */
+QProgressBar {
+    background-color: %(bg-inset)s;
+    border: none;
+    border-radius: 2px;
+    max-height: 4px;
+    min-height: 4px;
+    text-align: center;
+    color: transparent;
+}
+QProgressBar::chunk {
+    background-color: %(accent-primary)s;
+    border-radius: 2px;
+}
+
+/* === 菜单 === */
+QMenu {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+}
+QMenu::item {
+    padding: 6px 24px 6px 16px;
+    min-height: 32px;
+    border-radius: 4px;
+}
+QMenu::item:selected {
+    background-color: %(accent-primary-dim)s;
+    color: #FFFFFF;
+}
+QMenu::separator {
+    height: 1px;
+    background-color: %(fg-faint)s;
+    margin: 4px 8px;
+}
+QMenu::item[danger="true"]:selected {
+    background-color: rgba(248, 113, 113, 0.15);
+    color: %(status-error)s;
+}
+
+/* === 滚动条 === */
+QScrollBar:vertical {
+    background-color: transparent;
+    border: none;
+    width: 8px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background-color: %(fg-faint)s;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background-color: %(fg-muted)s;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+    background-color: transparent;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background-color: transparent;
+}
+QScrollBar:horizontal {
+    background-color: transparent;
+    border: none;
+    height: 8px;
+    margin: 0px;
+}
+QScrollBar::handle:horizontal {
+    background-color: %(fg-faint)s;
+    border-radius: 4px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background-color: %(fg-muted)s;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+    background-color: transparent;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background-color: transparent;
+}
+
+/* === 分割器 === */
+QSplitter {
+    background-color: %(bg-vault)s;
+}
+QSplitter::handle {
+    background-color: %(fg-faint)s;
+}
+QSplitter::handle:horizontal {
+    width: 1px;
+}
+QSplitter::handle:vertical {
+    height: 1px;
+}
+
+/* === 对话框 === */
+QDialog {
+    background-color: %(bg-surface)s;
+    color: %(fg-primary)s;
+}
+
+/* === 复选框 / 单选按钮 === */
+QCheckBox {
+    color: %(fg-primary)s;
+    font-size: 14px;
+    spacing: 8px;
+    background-color: transparent;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 3px;
+    background-color: %(bg-inset)s;
+}
+QCheckBox::indicator:checked {
+    background-color: %(accent-primary)s;
+    border: 1px solid %(accent-primary)s;
+}
+QCheckBox::indicator:hover {
+    border: 1px solid %(accent-primary-dim)s;
+}
+QRadioButton {
+    color: %(fg-primary)s;
+    font-size: 14px;
+    spacing: 8px;
+    background-color: transparent;
+}
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+    background-color: %(bg-inset)s;
+}
+QRadioButton::indicator:checked {
+    background-color: %(accent-primary)s;
+    border: 1px solid %(accent-primary)s;
+}
+
+/* === 数值输入框 === */
+QSpinBox {
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 4px;
+    padding: 6px 10px;
+    min-height: 32px;
+    font-size: 14px;
+}
+QSpinBox:focus {
+    border: 1px solid %(accent-primary)s;
+}
+
+/* === 分组框 === */
+QGroupBox {
+    color: %(fg-secondary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    font-size: 13px;
+    font-weight: 500;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0px 8px;
+    color: %(fg-secondary)s;
+}
+
+/* === 工具提示 === */
+QToolTip {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+/* === 文本浏览器 === */
+QTextBrowser {
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+    border: none;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+/* === 帧 === */
+QFrame {
+    background-color: transparent;
+    border: none;
+}
+QFrame[panelType="card"] {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+QFrame[panelType="inset"] {
+    background-color: %(bg-inset)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+}
+
+/* === 滚动区域 === */
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
+
+/* === 对话框按钮盒 === */
+QDialogButtonBox QPushButton {
+    min-width: 80px;
+    padding: 6px 16px;
+}

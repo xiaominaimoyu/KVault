@@ -46,16 +46,17 @@ from core.retriever import Retriever
 from core.text_splitter import KnowledgeTextSplitter
 from core.vector_store import VectorStore
 from core.workspace import WorkspaceManager
+from gui.styles.variables import TOKENS_DARK
 from gui.workers.ingest_worker import IngestWorker
 from gui.workers.search_worker import SearchWorker
 
 logger = logging.getLogger(__name__)
 
 _STATUS_COLORS = {
-    "indexed": "#2ecc71",
-    "indexing": "#f1c40f",
-    "pending": "#95a5a6",
-    "failed": "#e74c3c",
+    "indexed": TOKENS_DARK["status-success"],
+    "indexing": TOKENS_DARK["status-warning"],
+    "pending": TOKENS_DARK["fg-muted"],
+    "failed": TOKENS_DARK["status-error"],
 }
 
 _STATUS_LABELS = {
@@ -184,7 +185,7 @@ class ModelSwitchDialog(QDialog):
             "如重建失败将自动回滚到备份。"
         )
         self.hint.setWordWrap(True)
-        self.hint.setStyleSheet("color: gray; font-size: 11px;")
+
         layout.addRow("", self.hint)
 
         self.status_label = QLabel("")
@@ -271,7 +272,7 @@ class SettingsDialog(QDialog):
         self.backend_combo.currentIndexChanged.connect(self._on_backend_changed)
 
         self.backend_status_label = QLabel()
-        self.backend_status_label.setStyleSheet("font-size: 11px;")
+
         layout.addRow("后端状态", self.backend_status_label)
 
         self.chunk_size = QSpinBox()
@@ -286,7 +287,7 @@ class SettingsDialog(QDialog):
 
         self.chunk_hint = QLabel("提示：切分参数仅对新增索引起效，存量文档需重建索引后生效。")
         self.chunk_hint.setWordWrap(True)
-        self.chunk_hint.setStyleSheet("color: gray; font-size: 11px;")
+
         layout.addRow("", self.chunk_hint)
 
         self.top_k = QSpinBox()
@@ -342,16 +343,16 @@ class SettingsDialog(QDialog):
             tmp = LlamaCppBackend(model_path=self.gguf_path.text().strip())
             if tmp.is_available() and tmp.is_model_available():
                 self.backend_status_label.setText("✓ llama.cpp 后端就绪")
-                self.backend_status_label.setStyleSheet("color: green; font-size: 11px;")
+                self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['status-success']};")
             elif not tmp.is_available():
                 self.backend_status_label.setText("✗ 未安装 llama-cpp-python")
-                self.backend_status_label.setStyleSheet("color: red; font-size: 11px;")
+                self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['status-error']};")
             else:
                 self.backend_status_label.setText("✗ GGUF 模型文件不存在")
-                self.backend_status_label.setStyleSheet("color: red; font-size: 11px;")
+                self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['status-error']};")
         else:
             self.backend_status_label.setText("Ollama 后端（需启动 Ollama 服务）")
-            self.backend_status_label.setStyleSheet("color: gray; font-size: 11px;")
+            self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['fg-muted']};")
 
     def _on_mcp_toggled(self, checked: bool):
         self.mcp_enabled.setText("已启用" if checked else "已禁用")
@@ -397,6 +398,13 @@ class MainWindow(QMainWindow):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
+
+        from gui.styles.apply import apply_theme
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, getattr(config, "theme", "dark"))
+
         self.parser = DocumentParser()
         self.splitter = KnowledgeTextSplitter(
             chunk_size=config.chunk_size,
@@ -812,7 +820,7 @@ class MainWindow(QMainWindow):
             self.doc_table.setItem(row, 2, QTableWidgetItem(_format_size(doc.file_size)))
 
             status_item = QTableWidgetItem(_STATUS_LABELS.get(doc.status, doc.status))
-            color = _STATUS_COLORS.get(doc.status, "#95a5a6")
+            color = _STATUS_COLORS.get(doc.status, TOKENS_DARK["fg-muted"])
             status_item.setForeground(self._color_brush(color))
             self.doc_table.setItem(row, 3, status_item)
 
@@ -1178,10 +1186,10 @@ class MainWindow(QMainWindow):
 
     def _score_color(self, score: float) -> str:
         if score >= 0.8:
-            return "#27ae60"
+            return TOKENS_DARK["status-success"]
         if score >= 0.5:
-            return "#f39c12"
-        return "#e74c3c"
+            return TOKENS_DARK["status-warning"]
+        return TOKENS_DARK["status-error"]
 
     def _color_brush(self, color: str):
         return QBrush(QColor(color))
