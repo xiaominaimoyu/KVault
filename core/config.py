@@ -21,6 +21,30 @@ class Config:
     mcp_enabled: bool = False
     theme: str = "system"
 
+    def validate(self) -> list[str]:
+        """Validate config fields and return a list of error messages.
+
+        An empty list means the config is valid. Checks cover chunking
+        parameters (chunk_size > 0 and 0 <= chunk_overlap < chunk_size)
+        and similarity threshold range.
+        """
+        errors: list[str] = []
+        if self.chunk_size <= 0:
+            errors.append(f"chunk_size must be > 0, got {self.chunk_size}")
+        if self.chunk_overlap < 0:
+            errors.append(f"chunk_overlap must be >= 0, got {self.chunk_overlap}")
+        if self.chunk_overlap >= self.chunk_size:
+            errors.append(
+                f"chunk_overlap ({self.chunk_overlap}) must be < chunk_size ({self.chunk_size})"
+            )
+        if not 0 <= self.similarity_threshold <= 1:
+            errors.append(
+                f"similarity_threshold must be between 0 and 1, got {self.similarity_threshold}"
+            )
+        if self.top_k <= 0:
+            errors.append(f"top_k must be > 0, got {self.top_k}")
+        return errors
+
     def to_dict(self) -> dict:
         return {k: str(v) if isinstance(v, Path) else v for k, v in asdict(self).items()}
 
