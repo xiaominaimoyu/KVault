@@ -7,7 +7,7 @@ def test_search_empty_query(monkeypatch, tmp_config, metadata, vector_store, fak
     from core.retriever import Retriever
 
     retriever = Retriever(fake_embedder, vector_store, metadata, tmp_config)
-    monkeypatch.setattr(tools, "_get_services", lambda: (tmp_config, retriever, metadata))
+    monkeypatch.setattr(tools, "_get_services", lambda ws=None: (tmp_config, retriever, metadata))
     assert tools.search_knowledge_base("")["error"]
 
 
@@ -22,7 +22,7 @@ def test_list_and_preview(
         str(sample_txt), tmp_config, parser, splitter, fake_embedder, vector_store, metadata
     )
     retriever = Retriever(fake_embedder, vector_store, metadata, tmp_config)
-    monkeypatch.setattr(tools, "_get_services", lambda: (tmp_config, retriever, metadata))
+    monkeypatch.setattr(tools, "_get_services", lambda ws=None: (tmp_config, retriever, metadata))
 
     listed = tools.list_knowledge_bases()
     assert "partitions" in listed
@@ -40,6 +40,6 @@ def test_partition_filter_empty(monkeypatch, tmp_config, metadata, vector_store,
     from core.retriever import Retriever
 
     retriever = Retriever(fake_embedder, vector_store, metadata, tmp_config)
-    monkeypatch.setattr(tools, "_get_services", lambda: (tmp_config, retriever, metadata))
+    monkeypatch.setattr(tools, "_get_services", lambda ws=None: (tmp_config, retriever, metadata))
     out = tools.search_knowledge_base("anything", partition_filter="NoSuchPartition")
     assert out == {"results": []}

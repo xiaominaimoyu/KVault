@@ -8,12 +8,13 @@ from core.embedding_service import EmbeddingService
 from core.metadata_manager import MetadataManager
 from core.retriever import Retriever
 from core.vector_store import VectorStore
+from core.workspace import WorkspaceManager
 
 logger = logging.getLogger(__name__)
 
 _MAX_CONTENT_LEN = 800
 _MAX_PREVIEW_LEN = 2000
-_services_cache = None
+_services_cache: dict[str, tuple] = {}
 
 
 def _load_config() -> Config:
@@ -27,13 +28,26 @@ def _load_config() -> Config:
     return cfg
 
 
-def _get_services():
+def _get_services(workspace: Optional[str] = None) -> tuple | None:
     global _services_cache
-    if _services_cache is not None:
-        return _services_cache
+    ws_key = workspace or "default"
+    if ws_key in _services_cache:
+        return _services_cache[ws_key]
+
     config = _load_config()
-    vector_store = VectorStore(str(config.chroma_dir))
-    metadata = MetadataManager(str(config.sqlite_path), vector_store=vector_store)
+    data_root = Path(config.chroma_dir).parent.parent
+    ws_manager = WorkspaceManager(config, data_root)
+    ws_manager.ensure_default()
+
+    if workspace:
+        ws = ws_manager.get_workspace(workspace)
+        if ws is None:
+            return None
+    else:
+        ws = ws_manager.get_current()
+
+    vector_store = VectorStore(str(ws.chroma_dir))
+    metadata = MetadataManager(str(ws.sqlite_path), vector_store=vector_store)
     embedder = EmbeddingService(
         model=config.embedding_model,
         base_url=config.ollama_base_url,
@@ -45,13 +59,13 @@ def _get_services():
         metadata=metadata,
         config=config,
     )
-    _services_cache = (config, retriever, metadata)
-    return _services_cache
+    _services_cache[ws_key] = (config, retriever, metadata)
+    return _services_cache[ws_key]
 
 
 def reset_services_cache():
     global _services_cache
-    _services_cache = None
+    _services_cache = {}
 
 
 def _truncate(text: str, max_len: int) -> str:
@@ -65,6 +79,7 @@ def search_knowledge_base(
     top_k: int = 5,
     partition_filter: Optional[str] = None,
     tag_filters: Optional[list[str]] = None,
+    workspace: Optional[str] = None,
 ) -> dict:
     if not query or not query.strip():
         return {"error": "query cannot be empty"}
@@ -72,7 +87,10 @@ def search_knowledge_base(
     top_k = max(1, min(int(top_k), 50))
 
     try:
-        config, retriever, metadata = _get_services()
+        services = _get_services(workspace)
+        if services is None:
+            return {"error": "workspace not found"}
+        config, retriever, metadata = services
     except Exception as e:
         logger.exception("Failed to init search services")
         return {"error": f"service init failed: {e}"}
@@ -136,9 +154,12 @@ def search_knowledge_base(
     }
 
 
-def list_knowledge_bases() -> dict:
+def list_knowledge_bases(workspace: Optional[str] = None) -> dict:
     try:
-        _, _, metadata = _get_services()
+        services = _get_services(workspace)
+        if services is None:
+            return {"error": "workspace not found"}
+        _, _, metadata = services
     except Exception as e:
         logger.exception("Failed to init metadata")
         return {"error": f"service init failed: {e}"}
@@ -161,14 +182,17 @@ def list_knowledge_bases() -> dict:
     }
 
 
-def get_document_preview(document_id: str) -> dict:
+def get_document_preview(document_id: str, workspace: Optional[str] = None) -> dict:
     if not document_id or not document_id.strip():
         return {"error": "document_id cannot be empty"}
 
     document_id = document_id.strip()
 
     try:
-        _, _, metadata = _get_services()
+        services = _get_services(workspace)
+        if services is None:
+            return {"error": "workspace not found"}
+        _, _, metadata = services
     except Exception as e:
         logger.exception("Failed to init metadata")
         return {"error": f"service init failed: {e}"}
