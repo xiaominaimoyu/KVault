@@ -20,6 +20,8 @@ KVault 是一款面向个人的本地化知识库桌面应用，基于 **PySide6
 - **状态监控**：实时显示导入进度、文档统计、系统状态。
 - **MCP 外部接口**：提供标准化外部接口，便于其他工具调用。
 - **首次启动检查**：自动检测 Ollama 服务、模型可用性、数据目录。
+- **多知识库工作区**：创建、切换、归档、恢复独立的知识库工作区，数据完全隔离。
+- **插件化 Connector**：支持本地目录、GitHub 仓库等数据源 connector，可扩展同步外部文档。
 
 ---
 
@@ -192,6 +194,56 @@ async with stdio_client(server_params) as (read, write):
 ```
 
 更多参数和返回格式详见 [`docs/mcp-api.md`](docs/mcp-api.md)。
+
+---
+
+## 插件化 Connector
+
+KVault 支持通过 connector 从外部数据源同步文档到知识库。connector 遵循 `list → fetch → parse` 三步契约。
+
+### 内置 Connector
+
+| 类型 | 说明 | 联网 | 依赖 |
+|------|------|------|------|
+| `local_dir` | 本地目录扫描 | 否 | 无 |
+| `github` | GitHub 仓库拉取 | 是 | `requests`（可选） |
+| `notion` | Notion 数据库 | — | 未实现（接口占位） |
+| `feishu` | 飞书文档 | — | 未实现（接口占位） |
+
+### 配置方式
+
+在 `config.json` 的 `connectors` 段添加 connector 配置：
+
+```json
+{
+  "connectors": [
+    {
+      "type": "local_dir",
+      "name": "本地文档",
+      "dir_path": "/path/to/docs",
+      "extensions": [".txt", ".md"]
+    },
+    {
+      "type": "github",
+      "name": "项目文档",
+      "repo": "owner/repo",
+      "branch": "main",
+      "path_filter": "docs/"
+    }
+  ]
+}
+```
+
+### 使用示例
+
+```python
+from core.connectors import ConnectorRegistry, ConnectorSync
+
+connector = ConnectorRegistry.create("local_dir", dir_path="/path/to/docs")
+sync = ConnectorSync(connector, "local_dir")
+report = sync.sync()
+print(f"同步: {report.synced} 新增, {report.skipped} 跳过, {report.failed} 失败")
+```
 
 ---
 

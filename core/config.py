@@ -84,6 +84,7 @@ class Config:
     last_index_at: float | None = None
     hybrid_search: HybridSearchConfig = field(default_factory=HybridSearchConfig)
     workspaces: WorkspaceConfig = field(default_factory=WorkspaceConfig)
+    connectors: list[dict] = field(default_factory=list)
 
     def validate(self) -> list[str]:
         """Validate config fields and return a list of error messages.
@@ -109,6 +110,18 @@ class Config:
             errors.append(f"top_k must be > 0, got {self.top_k}")
         errors.extend(self.hybrid_search.validate())
         errors.extend(self.workspaces.validate())
+        valid_connector_types = {"local_dir", "github", "notion", "feishu"}
+        for i, c in enumerate(self.connectors):
+            if not isinstance(c, dict):
+                errors.append(f"connectors[{i}] must be a dict")
+                continue
+            ctype = c.get("type", "")
+            if ctype not in valid_connector_types:
+                errors.append(
+                    f"connectors[{i}].type must be one of {valid_connector_types}, got '{ctype}'"
+                )
+            if not c.get("name", "").strip():
+                errors.append(f"connectors[{i}].name must not be empty")
         return errors
 
     def to_dict(self) -> dict:
