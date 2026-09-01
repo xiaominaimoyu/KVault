@@ -138,6 +138,11 @@ class SettingsDialog(QDialog):
         self.chunk_overlap.setValue(config.chunk_overlap)
         layout.addRow("Chunk Overlap", self.chunk_overlap)
 
+        self.chunk_hint = QLabel("提示：切分参数仅对新增索引起效，存量文档需重建索引后生效。")
+        self.chunk_hint.setWordWrap(True)
+        self.chunk_hint.setStyleSheet("color: gray; font-size: 11px;")
+        layout.addRow("", self.chunk_hint)
+
         self.top_k = QSpinBox()
         self.top_k.setRange(1, 50)
         self.top_k.setValue(config.top_k)
@@ -163,29 +168,27 @@ class SettingsDialog(QDialog):
     def _on_save(self):
         try:
             threshold = float(self.threshold.text())
-            if not 0 <= threshold <= 1:
-                raise ValueError("threshold must be between 0 and 1")
         except ValueError as e:
             QMessageBox.warning(self, "Input Error", f"Invalid similarity threshold: {e}")
             return
 
-        chunk_size = self.chunk_size.value()
-        chunk_overlap = self.chunk_overlap.value()
-        if chunk_overlap >= chunk_size:
-            QMessageBox.warning(
-                self,
-                "Input Error",
-                "Chunk overlap must be smaller than chunk size",
-            )
-            return
-
         self.config.ollama_base_url = self.ollama_url.text().strip()
         self.config.embedding_model = self.model_name.text().strip()
-        self.config.chunk_size = chunk_size
-        self.config.chunk_overlap = chunk_overlap
+        self.config.chunk_size = self.chunk_size.value()
+        self.config.chunk_overlap = self.chunk_overlap.value()
         self.config.top_k = self.top_k.value()
         self.config.similarity_threshold = threshold
         self.config.mcp_enabled = self.mcp_enabled.isChecked()
+
+        errors = self.config.validate()
+        if errors:
+            QMessageBox.warning(
+                self,
+                "配置校验失败",
+                "以下配置项存在问题，已阻止保存：\n\n• " + "\n• ".join(errors),
+            )
+            return
+
         self.config.save()
         self.accept()
 
