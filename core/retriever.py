@@ -90,6 +90,14 @@ class Retriever:
                 if doc:
                     document_name = doc.file_name
 
+            partition_name = ""
+            if document_id:
+                doc = self.metadata.get_document(document_id)
+                if doc and doc.partition_id:
+                    part = self.metadata.get_partition(doc.partition_id)
+                    if part:
+                        partition_name = part.get("name", "")
+
             results.append(
                 SearchResult(
                     chunk_id=raw.chunk_id,
@@ -99,6 +107,8 @@ class Retriever:
                     score=raw.score,
                     chunk_index=chunk_index,
                     metadata=raw.metadata,
+                    partition=partition_name,
+                    hit_source="vector",
                 )
             )
 
