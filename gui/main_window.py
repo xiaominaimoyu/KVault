@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -43,6 +44,7 @@ from core.metadata_manager import DEFAULT_PARTITION_ID, MetadataManager
 from core.retriever import Retriever
 from core.text_splitter import KnowledgeTextSplitter
 from core.vector_store import VectorStore
+from core.workspace import WorkspaceManager
 from gui.workers.ingest_worker import IngestWorker
 from gui.workers.search_worker import SearchWorker
 
@@ -330,8 +332,15 @@ class MainWindow(QMainWindow):
             chunk_size=config.chunk_size,
             chunk_overlap=config.chunk_overlap,
         )
-        self.vector_store = VectorStore(str(config.chroma_dir))
-        self.metadata = MetadataManager(str(config.sqlite_path), vector_store=self.vector_store)
+
+        self._workspace_manager = WorkspaceManager(
+            config, Path(config.chroma_dir).parent.parent
+        )
+        self._workspace_manager.ensure_default()
+
+        current_ws = self._workspace_manager.get_current()
+        self.vector_store = VectorStore(str(current_ws.chroma_dir))
+        self.metadata = MetadataManager(str(current_ws.sqlite_path), vector_store=self.vector_store)
         self.embedder = EmbeddingService(
             model=config.embedding_model,
             base_url=config.ollama_base_url,
@@ -433,6 +442,21 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(10)
+
+        # Workspace selector
+        layout.addWidget(QLabel("<b>工作区</b>"))
+        ws_layout = QHBoxLayout()
+        self.workspace_combo = QComboBox()
+        self.workspace_combo.currentIndexChanged.connect(self._on_workspace_switch)
+        ws_layout.addWidget(self.workspace_combo, 1)
+        self.ws_create_btn = QPushButton("新建")
+        self.ws_create_btn.clicked.connect(self._on_workspace_create)
+        ws_layout.addWidget(self.ws_create_btn)
+        self.ws_delete_btn = QPushButton("删除")
+        self.ws_delete_btn.clicked.connect(self._on_workspace_delete)
+        ws_layout.addWidget(self.ws_delete_btn)
+        layout.addLayout(ws_layout)
+        self._reload_workspace_combo()
 
         # Partition tree
         layout.addWidget(QLabel("<b>分区</b>"))
@@ -1089,6 +1113,78 @@ class MainWindow(QMainWindow):
 
     def _color_brush(self, color: str):
         return QBrush(QColor(color))
+
+    def _reload_workspace_combo(self):
+        self.workspace_combo.blockSignals(True)
+        self.workspace_combo.clear()
+        for ws in self._workspace_manager.list_workspaces():
+            label = f"{ws.name} ({ws.id})" if ws.id != "default" else f"{ws.name}"
+            self.workspace_combo.addItem(label, ws.id)
+        current_id = self._workspace_manager.config.workspaces.current
+        idx = self.workspace_combo.findData(current_id)
+        if idx >= 0:
+            self.workspace_combo.setCurrentIndex(idx)
+        self.workspace_combo.blockSignals(False)
+
+    def _on_workspace_switch(self, index: int):
+        if index < 0:
+            return
+        ws_id = self.workspace_combo.itemData(index)
+        if not ws_id or ws_id == self._workspace_manager.config.workspaces.current:
+            return
+        try:
+            self._workspace_manager.switch(ws_id)
+            self._rebuild_services_for_workspace()
+            self._reload_all()
+            self.statusBar().showMessage(f"已切换到工作区: {ws_id}", 3000)
+        except Exception as e:
+            QMessageBox.warning(self, "切换失败", str(e))
+
+    def _on_workspace_create(self):
+        name, ok = QInputDialog.getText(self, "新建工作区", "工作区名称:")
+        if not ok or not name.strip():
+            return
+        try:
+            self._workspace_manager.create(name.strip())
+            self._reload_workspace_combo()
+            self.statusBar().showMessage(f"已创建工作区: {name.strip()}", 3000)
+        except Exception as e:
+            QMessageBox.warning(self, "创建失败", str(e))
+
+    def _on_workspace_delete(self):
+        ws_id = self.workspace_combo.currentData()
+        if not ws_id:
+            return
+        if ws_id == "default":
+            QMessageBox.warning(self, "无法删除", "不能删除默认工作区")
+            return
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除工作区 {ws_id} 吗？\n数据将归档，可后续恢复。",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            self._workspace_manager.delete(ws_id, archive=True)
+            self._reload_workspace_combo()
+            self._reload_all()
+            self.statusBar().showMessage(f"已归档工作区: {ws_id}", 3000)
+        except Exception as e:
+            QMessageBox.warning(self, "删除失败", str(e))
+
+    def _rebuild_services_for_workspace(self):
+        ws = self._workspace_manager.get_current()
+        self.vector_store = VectorStore(str(ws.chroma_dir))
+        self.metadata = MetadataManager(
+            str(ws.sqlite_path), vector_store=self.vector_store
+        )
+        self.retriever = Retriever(
+            embedder=self.embedder,
+            vector_store=self.vector_store,
+            metadata=self.metadata,
+            config=self.config,
+        )
 
     def closeEvent(self, event):
         if self._ingest_worker and self._ingest_worker.isRunning():
