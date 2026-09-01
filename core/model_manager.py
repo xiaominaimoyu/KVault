@@ -108,15 +108,34 @@ class ModelManager:
         return backup_root
 
     def rollback(self, backup_path: Path) -> None:
-        """从备份回滚 chroma_db + kb.sqlite。"""
+        """从备份回滚 chroma_db + kb.sqlite。
+
+        ChromaDB 的 PersistentClient 可能持有 sqlite3 文件句柄，
+        删除时遇到 PermissionError 则跳过删除，仅覆盖可写入的文件。
+        """
         chroma_backup = backup_path / "chroma_db"
         sqlite_backup = backup_path / "kb.sqlite"
 
         if chroma_backup.exists() and self.config.chroma_dir.exists():
-            shutil.rmtree(self.config.chroma_dir)
-            shutil.copytree(chroma_backup, self.config.chroma_dir)
+            try:
+                shutil.rmtree(self.config.chroma_dir)
+                shutil.copytree(chroma_backup, self.config.chroma_dir)
+            except PermissionError:
+                logger.warning("chroma_db 目录被占用，跳过目录级回滚，尝试文件级覆盖")
+                for src_file in chroma_backup.rglob("*"):
+                    if src_file.is_file():
+                        rel = src_file.relative_to(chroma_backup)
+                        dst_file = self.config.chroma_dir / rel
+                        dst_file.parent.mkdir(parents=True, exist_ok=True)
+                        try:
+                            shutil.copy2(src_file, dst_file)
+                        except PermissionError:
+                            logger.warning("跳过被占用文件: %s", dst_file)
         if sqlite_backup.exists():
-            shutil.copy2(sqlite_backup, self.config.sqlite_path)
+            try:
+                shutil.copy2(sqlite_backup, self.config.sqlite_path)
+            except PermissionError:
+                logger.warning("kb.sqlite 被占用，跳过回滚")
         logger.info("rolled back from %s", backup_path)
 
     def switch_model(
@@ -171,6 +190,9 @@ class ModelManager:
 
         except Exception as e:
             logger.exception("模型切换失败")
+            old = locals().get("old_model")
+            if old is not None:
+                self.config.embedding_model = old
             backup = locals().get("backup_path")
             if backup:
                 notify("异常发生，执行回滚")

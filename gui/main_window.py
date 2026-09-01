@@ -109,6 +109,59 @@ class ReindexWorker(QThread):
         self.finished_all.emit(success, fail)
 
 
+class ModelSwitchDialog(QDialog):
+    """嵌入模型切换对话框，编排备份→重建→校验→可回滚工作流。"""
+
+    def __init__(self, config: Config, model_manager, rebuild_fn, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("切换嵌入模型")
+        self.resize(400, 200)
+        self.config = config
+        self.model_manager = model_manager
+        self.rebuild_fn = rebuild_fn
+
+        layout = QFormLayout(self)
+        self.new_model_input = QLineEdit(config.embedding_model)
+        layout.addRow("新模型名", self.new_model_input)
+
+        self.hint = QLabel(
+            "切换将执行：备份当前索引 → 重建 → 校验 → 可回滚。\n"
+            "如重建失败将自动回滚到备份。"
+        )
+        self.hint.setWordWrap(True)
+        self.hint.setStyleSheet("color: gray; font-size: 11px;")
+        layout.addRow("", self.hint)
+
+        self.status_label = QLabel("")
+        layout.addRow("状态", self.status_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("开始切换")
+        buttons.accepted.connect(self._on_switch)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def _on_switch(self):
+        new_model = self.new_model_input.text().strip()
+        if not new_model:
+            QMessageBox.warning(self, "输入错误", "请输入新模型名")
+            return
+        self.status_label.setText("正在切换，请稍候...")
+        result = self.model_manager.switch_model(new_model, self.rebuild_fn)
+        if result.success:
+            self.status_label.setText("切换成功")
+            QMessageBox.information(
+                self, "成功", f"已切换到模型 {new_model}\n备份位于: {result.backup_path}"
+            )
+            self.accept()
+        else:
+            msg = f"切换失败: {result.error}"
+            if result.rolled_back:
+                msg += "\n已自动回滚到备份索引"
+            self.status_label.setText("切换失败")
+            QMessageBox.critical(self, "失败", msg)
+
+
 class SettingsDialog(QDialog):
     def __init__(self, config: Config, parent=None):
         super().__init__(parent)
@@ -157,10 +210,23 @@ class SettingsDialog(QDialog):
         self.mcp_enabled.toggled.connect(self._on_mcp_toggled)
         layout.addRow("MCP 服务", self.mcp_enabled)
 
+        self._model_manager = getattr(parent, "_model_manager", None) if parent else None
+        self._rebuild_fn = getattr(parent, "_rebuild_all_fn", None) if parent else None
+        if self._model_manager and self._rebuild_fn:
+            self.switch_model_btn = QPushButton("切换模型...")
+            self.switch_model_btn.clicked.connect(self._on_switch_model)
+            layout.addRow("模型管理", self.switch_model_btn)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_save)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
+
+    def _on_switch_model(self):
+        dialog = ModelSwitchDialog(
+            self.config, self._model_manager, self._rebuild_fn, parent=self
+        )
+        dialog.exec()
 
     def _on_mcp_toggled(self, checked: bool):
         self.mcp_enabled.setText("已启用" if checked else "已禁用")
