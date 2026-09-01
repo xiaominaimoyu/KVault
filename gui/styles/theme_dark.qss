@@ -356,6 +356,63 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background-color: transparent;
 }
 
+/* === 左侧导航面板 === */
+QWidget#NavPanel {
+    background-color: %(bg-surface)s;
+    border-right: 1px solid %(fg-faint)s;
+}
+QLabel#PanelSectionTitle {
+    color: %(fg-secondary)s;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* === 格式徽章 === */
+QLabel#FormatBadge {
+    background-color: %(bg-inset)s;
+    color: %(fg-secondary)s;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+QListWidget#TagPillList {
+    background-color: transparent;
+    border: none;
+}
+QListWidget#TagPillList::item {
+    background-color: %(bg-inset)s;
+    color: %(fg-secondary)s;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    padding: 4px 10px;
+    margin: 2px;
+    min-height: 16px;
+}
+QListWidget#TagPillList::item:hover {
+    background-color: %(bg-raised)s;
+}
+QListWidget#TagPillList::item:selected {
+    background-color: rgba(45, 212, 191, 0.15);
+    color: %(accent-primary)s;
+    border: 1px solid %(accent-primary)s;
+}
+QFrame#StatsCard {
+    background-color: %(bg-raised)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+QLabel#StatsSummary {
+    color: %(fg-secondary)s;
+    font-size: 13px;
+}
+QLabel#StatsDetail {
+    color: %(fg-muted)s;
+    font-size: 11px;
+}
+
 /* === 分割器 === */
 QSplitter {
     background-color: %(bg-vault)s;
@@ -469,6 +526,170 @@ QTextBrowser {
 QFrame {
     background-color: transparent;
     border: none;
+}
+
+/* === 视图切换按钮（列表/卡片） === */
+QPushButton#ViewToggleButton {
+    background-color: %(bg-inset)s;
+    color: %(fg-secondary)s;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+QPushButton#ViewToggleButton:hover {
+    background-color: %(bg-raised)s;
+}
+QPushButton#ViewToggleButton:checked {
+    background-color: %(bg-raised)s;
+    color: %(accent-primary)s;
+    border: 1px solid %(accent-primary-dim)s;
+}
+
+/* === 批量操作浮动条 === */
+QFrame#FloatingActionBar {
+    background-color: %(bg-raised)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+QLabel#FloatingActionBarInfo {
+    color: %(fg-secondary)s;
+    font-size: 12px;
+    padding-right: 8px;
+}
+QPushButton#FloatingActionButton {
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+QPushButton#FloatingActionButton:hover {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+}
+QPushButton#FloatingActionButton:pressed {
+    background-color: %(bg-inset)s;
+}
+
+/* === 拖拽导入遮罩 === */
+QLabel#DropOverlay {
+    background-color: rgba(45, 212, 191, 0.12);
+    border: 2px dashed %(accent-primary)s;
+    border-radius: 8px;
+    color: %(accent-primary)s;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* === 文档卡片 === */
+QListWidget#DocGridList {
+    background-color: transparent;
+    border: none;
+}
+QListWidget#DocGridList::item {
+    border-radius: 8px;
+}
+QListWidget#DocGridList::item:selected {
+    background-color: transparent;
+}
+QFrame#DocCard {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+QFrame#DocCard:hover {
+    border: 1px solid %(fg-muted)s;
+}
+QFrame#DocCard[selected="true"] {
+    border: 1px solid %(accent-primary)s;
+    background-color: rgba(45, 212, 191, 0.06);
+}
+QLabel#DocCardName {
+    color: %(fg-primary)s;
+    font-size: 13px;
+    font-weight: 500;
+}
+QLabel#DocCardMeta {
+    color: %(fg-muted)s;
+    font-size: 11px;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+/* === 空状态 === */
+QLabel#EmptyStateIcon {
+    font-size: 40px;
+}
+QLabel#EmptyStateTitle {
+    color: %(fg-primary)s;
+    font-size: 18px;
+    font-weight: 700;
+}
+QLabel#EmptyStateSubtitle {
+    color: %(fg-secondary)s;
+    font-size: 13px;
+}
+QPushButton#EmptyStateCta {
+    background-color: %(accent-primary)s;
+    color: %(bg-vault)s;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-top: 8px;
+}
+QPushButton#EmptyStateCta:hover {
+    background-color: %(accent-primary-hover)s;
+}
+QPushButton#EmptyStateCta:pressed {
+    background-color: %(accent-primary-dim)s;
+}
+
+/* === 步骤指示器 === */
+QWidget#StepIndicator {
+    background-color: transparent;
+}
+QLabel#StepIndexLabel {
+    color: %(fg-muted)s;
+    font-size: 11px;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+QLabel#StepLabel {
+    color: %(fg-muted)s;
+    font-size: 12px;
+}
+QLabel#StepLabel[state="current"] {
+    color: %(accent-primary)s;
+    font-weight: 600;
+}
+QLabel#StepLabel[state="completed"] {
+    color: %(fg-secondary)s;
+}
+QLabel#StepSeparator {
+    color: %(fg-faint)s;
+    font-size: 12px;
+}
+
+/* === 相似度分数条 === */
+QWidget#ScoreBar {
+    background-color: transparent;
+}
+QProgressBar#ScoreBarTrack {
+    background-color: %(bg-inset)s;
+    border: none;
+    border-radius: 3px;
+    max-height: 6px;
+}
+QProgressBar#ScoreBarTrack::chunk {
+    background-color: %(accent-primary)s;
+    border-radius: 3px;
+}
+QLabel#ScoreBarLabel {
+    color: %(fg-secondary)s;
+    font-size: 11px;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
 }
 QFrame[panelType="card"] {
     background-color: %(bg-surface)s;

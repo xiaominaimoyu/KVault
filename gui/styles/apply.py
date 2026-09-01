@@ -78,8 +78,12 @@ def apply_theme(app: QGuiApplication, theme: str = "dark") -> str:
         resolved = resolve_system_theme()
         return apply_theme(app, resolved)
 
+    if theme not in ("dark", "light"):
+        logger.warning("unknown theme '%s', falling back to dark", theme)
+        theme = "dark"
+
     tokens = TOKENS_DARK if theme == "dark" else TOKENS_LIGHT
-    qss_theme = "dark" if theme == "dark" else "light"
+    qss_theme = theme
 
     try:
         qss_template = _load_qss(qss_theme)
