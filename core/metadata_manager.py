@@ -531,3 +531,43 @@ class MetadataManager:
                 "INSERT OR REPLACE INTO index_meta (key, value) VALUES (?, ?)",
                 (key, value),
             )
+
+    # ---------- 文档指纹 ----------
+
+    def get_fingerprint(self, doc_id: str) -> Optional[dict]:
+        """读取文档的 content_hash / mtime / stored_path。"""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT stored_path, content_hash, mtime FROM documents WHERE id = ?",
+                (doc_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "stored_path": row["stored_path"],
+            "content_hash": row["content_hash"],
+            "mtime": row["mtime"],
+        }
+
+    def update_fingerprint(self, doc_id: str, content_hash: str, mtime: float) -> None:
+        """更新文档的 content_hash 与 mtime。"""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE documents SET content_hash = ?, mtime = ?, updated_at = ? WHERE id = ?",
+                (content_hash, mtime, time.time(), doc_id),
+            )
+
+    def list_all_fingerprints(self) -> dict[str, dict]:
+        """返回所有文档的指纹，键为 doc_id。"""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, stored_path, content_hash, mtime FROM documents"
+            ).fetchall()
+        return {
+            row["id"]: {
+                "stored_path": row["stored_path"],
+                "content_hash": row["content_hash"],
+                "mtime": row["mtime"],
+            }
+            for row in rows
+        }

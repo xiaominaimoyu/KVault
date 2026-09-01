@@ -10,7 +10,7 @@ def test_migrate_creates_schema_meta(tmp_path: Path):
     db_path = tmp_path / "test.sqlite"
     migrator = SchemaMigrator(str(db_path))
     version = migrator.migrate()
-    assert version == 2
+    assert version == 3
 
     with sqlite3.connect(str(db_path)) as conn:
         tables = {r[0] for r in conn.execute(
@@ -25,7 +25,7 @@ def test_migrate_idempotent(tmp_path: Path):
     migrator = SchemaMigrator(str(db_path))
     v1 = migrator.migrate()
     v2 = migrator.migrate()
-    assert v1 == v2 == 2
+    assert v1 == v2 == 3
 
 
 def test_migrate_from_old_schema(tmp_path: Path):
@@ -37,12 +37,12 @@ def test_migrate_from_old_schema(tmp_path: Path):
 
     migrator = SchemaMigrator(str(db_path))
     version = migrator.migrate()
-    assert version == 2
+    assert version == 3
 
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()
         assert row is not None
-        assert int(row[0]) == 2
+        assert int(row[0]) == 3
         tables = {r[0] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         ).fetchall()}

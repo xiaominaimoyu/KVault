@@ -109,6 +109,58 @@ class ReindexWorker(QThread):
         self.finished_all.emit(success, fail)
 
 
+class IncrementalUpdateDialog(QDialog):
+    """增量更新对话框，展示差异清单与更新进度。"""
+
+    def __init__(self, incremental_updater, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("增量更新")
+        self.resize(500, 400)
+        self.updater = incremental_updater
+
+        layout = QFormLayout(self)
+        self.status_label = QLabel("正在扫描差异...")
+        layout.addRow("状态", self.status_label)
+
+        self.diff_list = QListWidget()
+        layout.addRow("差异清单", self.diff_list)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("执行更新")
+        buttons.accepted.connect(self._on_update)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+        self._scan()
+
+    def _scan(self):
+        self.diff_list.clear()
+        self._report = self.updater.scan_diffs()
+        for p in self._report.added:
+            self.diff_list.addItem(f"[新增] {p}")
+        for p in self._report.modified:
+            self.diff_list.addItem(f"[修改] {p}")
+        for p in self._report.deleted:
+            self.diff_list.addItem(f"[删除] {p}")
+        for p in self._report.unreadable:
+            self.diff_list.addItem(f"[无法读取] {p}")
+        total = len(self._report.added) + len(self._report.modified) + len(self._report.deleted)
+        self.status_label.setText(f"共 {total} 项变更（新增 {len(self._report.added)}，修改 {len(self._report.modified)}，删除 {len(self._report.deleted)}）")
+
+    def _on_update(self):
+        self.status_label.setText("正在更新...")
+        result = self.updater.update(self._report)
+        self.status_label.setText(
+            f"完成：成功 {result.success_count}，失败 {result.fail_count}"
+        )
+        if result.dirty_doc_ids:
+            QMessageBox.warning(
+                self, "脏数据",
+                f"以下文档索引失败，已跳过：\n" + "\n".join(result.dirty_doc_ids[:10]),
+            )
+        self.accept()
+
+
 class ModelSwitchDialog(QDialog):
     """嵌入模型切换对话框，编排备份→重建→校验→可回滚工作流。"""
 
