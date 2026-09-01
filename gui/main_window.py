@@ -262,6 +262,12 @@ class SettingsDialog(QDialog):
         self.mcp_enabled.toggled.connect(self._on_mcp_toggled)
         layout.addRow("MCP 服务", self.mcp_enabled)
 
+        self.hybrid_enabled = QPushButton("已启用" if config.hybrid_search.enabled else "已禁用")
+        self.hybrid_enabled.setCheckable(True)
+        self.hybrid_enabled.setChecked(config.hybrid_search.enabled)
+        self.hybrid_enabled.toggled.connect(self._on_hybrid_toggled)
+        layout.addRow("混合检索", self.hybrid_enabled)
+
         self._model_manager = getattr(parent, "_model_manager", None) if parent else None
         self._rebuild_fn = getattr(parent, "_rebuild_all_fn", None) if parent else None
         if self._model_manager and self._rebuild_fn:
@@ -283,6 +289,9 @@ class SettingsDialog(QDialog):
     def _on_mcp_toggled(self, checked: bool):
         self.mcp_enabled.setText("已启用" if checked else "已禁用")
 
+    def _on_hybrid_toggled(self, checked: bool):
+        self.hybrid_enabled.setText("已启用" if checked else "已禁用")
+
     def _on_save(self):
         try:
             threshold = float(self.threshold.text())
@@ -297,6 +306,7 @@ class SettingsDialog(QDialog):
         self.config.top_k = self.top_k.value()
         self.config.similarity_threshold = threshold
         self.config.mcp_enabled = self.mcp_enabled.isChecked()
+        self.config.hybrid_search.enabled = self.hybrid_enabled.isChecked()
 
         errors = self.config.validate()
         if errors:

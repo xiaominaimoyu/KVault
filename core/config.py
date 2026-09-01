@@ -7,6 +7,29 @@ from pathlib import Path
 
 
 @dataclass
+class HybridSearchConfig:
+    """混合检索配置。"""
+
+    enabled: bool = False
+    strategy: str = "rrf"
+    bm25_weight: float = 0.5
+    vector_weight: float = 0.5
+    rrf_k: int = 60
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        if self.strategy not in ("rrf", "weighted_norm"):
+            errors.append(f"hybrid_search.strategy must be 'rrf' or 'weighted_norm', got '{self.strategy}'")
+        if self.bm25_weight < 0 or self.vector_weight < 0:
+            errors.append("hybrid_search weights must be non-negative")
+        if self.bm25_weight + self.vector_weight <= 0:
+            errors.append("hybrid_search weights sum must be > 0")
+        if self.rrf_k <= 0:
+            errors.append(f"hybrid_search.rrf_k must be > 0, got {self.rrf_k}")
+        return errors
+
+
+@dataclass
 class Config:
     files_dir: Path = Path("./data/files")
     chroma_dir: Path = Path("./data/chroma_db")
@@ -24,6 +47,7 @@ class Config:
     last_index_model: str | None = None
     last_index_dimension: int | None = None
     last_index_at: float | None = None
+    hybrid_search: HybridSearchConfig = field(default_factory=HybridSearchConfig)
 
     def validate(self) -> list[str]:
         """Validate config fields and return a list of error messages.
@@ -47,10 +71,17 @@ class Config:
             )
         if self.top_k <= 0:
             errors.append(f"top_k must be > 0, got {self.top_k}")
+        errors.extend(self.hybrid_search.validate())
         return errors
 
     def to_dict(self) -> dict:
-        return {k: str(v) if isinstance(v, Path) else v for k, v in asdict(self).items()}
+        d = {}
+        for k, v in asdict(self).items():
+            if isinstance(v, Path):
+                d[k] = str(v)
+            else:
+                d[k] = v
+        return d
 
     @classmethod
     def load(cls, path: str = "config.json") -> "Config":
@@ -64,6 +95,10 @@ class Config:
                 data[key] = _resolve_path(data[key], base_dir)
             elif key not in data:
                 data[key] = _resolve_path(getattr(cls, key), base_dir)
+
+        # Parse nested hybrid_search config
+        if "hybrid_search" in data and isinstance(data["hybrid_search"], dict):
+            data["hybrid_search"] = HybridSearchConfig(**data["hybrid_search"])
 
         cfg = cls(**data)
         cfg.files_dir.mkdir(parents=True, exist_ok=True)
