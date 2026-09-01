@@ -1,5 +1,7 @@
-import chromadb
+import time
 from dataclasses import dataclass
+
+import chromadb
 
 
 @dataclass
@@ -10,13 +12,51 @@ class SearchResult:
     metadata: dict
 
 
+@dataclass
+class ModelVersionInfo:
+    """嵌入模型版本信息，用于写入 collection metadata。"""
+
+    model: str
+    dimension: int
+    created_at: float | None = None
+
+
 class VectorStore:
-    def __init__(self, persist_dir: str = "./data/chroma_db"):
+    def __init__(
+        self,
+        persist_dir: str = "./data/chroma_db",
+        model_info: ModelVersionInfo | None = None,
+    ):
         self.client = chromadb.PersistentClient(path=persist_dir)
+        metadata: dict = {"hnsw:space": "cosine"}
+        if model_info:
+            metadata["embedding_model"] = model_info.model
+            metadata["dimension"] = str(model_info.dimension)
+            metadata["created_at"] = str(model_info.created_at or time.time())
         self.collection = self.client.get_or_create_collection(
             name="knowledge_base",
-            metadata={"hnsw:space": "cosine"},
+            metadata=metadata,
         )
+
+    def set_collection_metadata(
+        self, model: str, dimension: int, created_at: float | None = None
+    ) -> None:
+        """更新 collection 的嵌入模型版本元数据。"""
+        self.collection.metadata = {
+            "hnsw:space": "cosine",
+            "embedding_model": model,
+            "dimension": str(dimension),
+            "created_at": str(created_at or time.time()),
+        }
+
+    def get_collection_metadata(self) -> dict:
+        """读取 collection 元数据，返回 embedding_model/dimension/created_at（可能缺失）。"""
+        meta = self.collection.metadata or {}
+        return {
+            "embedding_model": meta.get("embedding_model"),
+            "dimension": int(meta["dimension"]) if meta.get("dimension") else None,
+            "created_at": float(meta["created_at"]) if meta.get("created_at") else None,
+        }
 
     def add_chunks(self, ids: list[str], texts: list[str],
                    embeddings: list[list[float]], metadatas: list[dict]):
