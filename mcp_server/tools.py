@@ -128,6 +128,8 @@ def search_knowledge_base(
                 "chunk_index": r.chunk_index,
                 "score": round(float(r.score), 4),
                 "content": _truncate(r.content, _MAX_CONTENT_LEN),
+                "partition": r.partition,
+                "hit_source": r.hit_source,
             }
             for r in results
         ]
