@@ -30,6 +30,41 @@ class HybridSearchConfig:
 
 
 @dataclass
+class WorkspaceItem:
+    """单个工作区元数据。"""
+
+    id: str
+    name: str
+    created_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class WorkspaceConfig:
+    """工作区配置段。"""
+
+    current: str = "default"
+    items: list[WorkspaceItem] = field(default_factory=lambda: [WorkspaceItem(id="default", name="默认工作区")])
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        ids = [ws.id for ws in self.items]
+        if len(ids) != len(set(ids)):
+            errors.append("workspace ids must be unique")
+        for ws in self.items:
+            if not ws.name.strip():
+                errors.append(f"workspace '{ws.id}' name must not be empty")
+        if self.current and self.current not in ids:
+            errors.append(f"workspaces.current '{self.current}' not found in items")
+        return errors
+
+    def get_item(self, ws_id: str) -> WorkspaceItem | None:
+        for ws in self.items:
+            if ws.id == ws_id:
+                return ws
+        return None
+
+
+@dataclass
 class Config:
     files_dir: Path = Path("./data/files")
     chroma_dir: Path = Path("./data/chroma_db")
@@ -48,6 +83,7 @@ class Config:
     last_index_dimension: int | None = None
     last_index_at: float | None = None
     hybrid_search: HybridSearchConfig = field(default_factory=HybridSearchConfig)
+    workspaces: WorkspaceConfig = field(default_factory=WorkspaceConfig)
 
     def validate(self) -> list[str]:
         """Validate config fields and return a list of error messages.
@@ -72,6 +108,7 @@ class Config:
         if self.top_k <= 0:
             errors.append(f"top_k must be > 0, got {self.top_k}")
         errors.extend(self.hybrid_search.validate())
+        errors.extend(self.workspaces.validate())
         return errors
 
     def to_dict(self) -> dict:
@@ -99,6 +136,17 @@ class Config:
         # Parse nested hybrid_search config
         if "hybrid_search" in data and isinstance(data["hybrid_search"], dict):
             data["hybrid_search"] = HybridSearchConfig(**data["hybrid_search"])
+
+        # Parse nested workspaces config
+        if "workspaces" in data and isinstance(data["workspaces"], dict):
+            ws_data = data["workspaces"]
+            items = [
+                WorkspaceItem(**item) for item in ws_data.get("items", [])
+            ]
+            data["workspaces"] = WorkspaceConfig(
+                current=ws_data.get("current", "default"),
+                items=items or [WorkspaceItem(id="default", name="默认工作区")],
+            )
 
         cfg = cls(**data)
         cfg.files_dir.mkdir(parents=True, exist_ok=True)

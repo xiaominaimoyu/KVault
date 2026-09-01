@@ -28,6 +28,7 @@ def search_knowledge_base_tool(
     top_k: int = 5,
     partition_filter: str | None = None,
     tag_filters: list[str] | None = None,
+    workspace: str | None = None,
 ) -> dict:
     """在个人知识库中执行语义检索。"""
     return search_knowledge_base(
@@ -35,19 +36,23 @@ def search_knowledge_base_tool(
         top_k=top_k,
         partition_filter=partition_filter,
         tag_filters=tag_filters,
+        workspace=workspace,
     )
 
 
 @mcp.tool()
-def list_knowledge_bases_tool() -> dict:
+def list_knowledge_bases_tool(workspace: str | None = None) -> dict:
     """列出所有分区及文档数量。"""
-    return list_knowledge_bases()
+    return list_knowledge_bases(workspace=workspace)
 
 
 @mcp.tool()
-def get_document_preview_tool(document_id: str) -> dict:
+def get_document_preview_tool(
+    document_id: str,
+    workspace: str | None = None,
+) -> dict:
     """获取指定文档的预览内容和元信息。"""
-    return get_document_preview(document_id)
+    return get_document_preview(document_id, workspace=workspace)
 
 
 def main():
