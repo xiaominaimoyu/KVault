@@ -65,6 +65,28 @@ class WorkspaceConfig:
 
 
 @dataclass
+class LlamaCppConfig:
+    """llama.cpp 后端配置。"""
+
+    model_path: str = ""
+    n_gpu_layers: int = 0
+    n_ctx: int = 2048
+    embedding_dim: int | None = None
+
+    def validate(self, backend: str) -> list[str]:
+        errors: list[str] = []
+        if backend != "llama_cpp":
+            return errors
+        if not self.model_path.strip():
+            errors.append("llama_cpp.model_path must not be empty when backend is llama_cpp")
+        if self.n_gpu_layers < 0:
+            errors.append(f"llama_cpp.n_gpu_layers must be >= 0, got {self.n_gpu_layers}")
+        if self.n_ctx < 512:
+            errors.append(f"llama_cpp.n_ctx must be >= 512, got {self.n_ctx}")
+        return errors
+
+
+@dataclass
 class Config:
     files_dir: Path = Path("./data/files")
     chroma_dir: Path = Path("./data/chroma_db")
@@ -75,6 +97,8 @@ class Config:
     embedding_model: str = "bge-large-zh-v1.5"
     ollama_base_url: str = "http://localhost:11434"
     embedding_batch_size: int = 32
+    embedding_backend: str = "ollama"
+    llama_cpp: LlamaCppConfig = field(default_factory=LlamaCppConfig)
     top_k: int = 5
     similarity_threshold: float = 0.5
     mcp_enabled: bool = False
@@ -110,6 +134,11 @@ class Config:
             errors.append(f"top_k must be > 0, got {self.top_k}")
         errors.extend(self.hybrid_search.validate())
         errors.extend(self.workspaces.validate())
+        if self.embedding_backend not in ("ollama", "llama_cpp"):
+            errors.append(
+                f"embedding_backend must be 'ollama' or 'llama_cpp', got '{self.embedding_backend}'"
+            )
+        errors.extend(self.llama_cpp.validate(self.embedding_backend))
         valid_connector_types = {"local_dir", "github", "notion", "feishu"}
         for i, c in enumerate(self.connectors):
             if not isinstance(c, dict):
@@ -160,6 +189,10 @@ class Config:
                 current=ws_data.get("current", "default"),
                 items=items or [WorkspaceItem(id="default", name="默认工作区")],
             )
+
+        # Parse nested llama_cpp config
+        if "llama_cpp" in data and isinstance(data["llama_cpp"], dict):
+            data["llama_cpp"] = LlamaCppConfig(**data["llama_cpp"])
 
         cfg = cls(**data)
         cfg.files_dir.mkdir(parents=True, exist_ok=True)
