@@ -12,7 +12,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 class SchemaMigrator:
@@ -54,6 +54,8 @@ class SchemaMigrator:
 
             if current < 2:
                 self._migrate_v1_to_v2(conn)
+            if current < 3:
+                self._migrate_v2_to_v3(conn)
 
             self._set_version(conn, CURRENT_SCHEMA_VERSION)
             logger.info("schema migrated to version=%d", CURRENT_SCHEMA_VERSION)
@@ -74,3 +76,16 @@ class SchemaMigrator:
                 "CREATE TABLE IF NOT EXISTS index_meta (key TEXT PRIMARY KEY, value TEXT)"
             )
             logger.info("index_meta table created")
+
+    @staticmethod
+    def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
+        """v2→v3: documents 表新增 content_hash / mtime 列用于增量更新。"""
+        cols = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(documents)").fetchall()
+        }
+        if "content_hash" not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN content_hash TEXT")
+        if "mtime" not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN mtime REAL")
+        logger.info("documents table: added content_hash/mtime columns")
