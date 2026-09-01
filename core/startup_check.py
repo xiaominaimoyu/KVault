@@ -1,4 +1,5 @@
 import logging
+import os
 from dataclasses import dataclass
 
 import ollama
@@ -22,8 +23,12 @@ class StartupChecker:
         results = []
         results.append(self._check_data_dirs())
         results.append(self._check_sqlite())
-        results.append(self._check_ollama_service())
-        results.append(self._check_embedding_model())
+        if self.config.embedding_backend == "llama_cpp":
+            results.append(self._check_llama_cpp_dependency())
+            results.append(self._check_gguf_model())
+        else:
+            results.append(self._check_ollama_service())
+            results.append(self._check_embedding_model())
         return results
 
     def _check_data_dirs(self) -> CheckResult:
@@ -123,3 +128,64 @@ class StartupChecker:
 
     def has_errors(self, results: list[CheckResult]) -> bool:
         return any(not r.passed for r in results)
+
+    def _check_llama_cpp_dependency(self) -> CheckResult:
+        try:
+            import llama_cpp
+            if hasattr(llama_cpp, "Llama"):
+                return CheckResult(
+                    name="llama.cpp 依赖",
+                    passed=True,
+                    message="llama-cpp-python 已安装",
+                )
+            return CheckResult(
+                name="llama.cpp 依赖",
+                passed=False,
+                message="llama-cpp-python 版本不兼容",
+                suggestion="请升级 llama-cpp-python 至最新版本",
+            )
+        except ImportError:
+            return CheckResult(
+                name="llama.cpp 依赖",
+                passed=False,
+                message="未安装 llama-cpp-python",
+                suggestion="pip install llama-cpp-python 或切换至 Ollama 后端",
+            )
+
+    def _check_gguf_model(self) -> CheckResult:
+        path = self.config.llama_cpp.model_path
+        if not path.strip():
+            return CheckResult(
+                name="GGUF 模型",
+                passed=False,
+                message="未配置 GGUF 模型路径",
+                suggestion="请在设置中指定 .gguf 模型文件路径",
+            )
+        from pathlib import Path
+        p = Path(path)
+        if not p.exists():
+            return CheckResult(
+                name="GGUF 模型",
+                passed=False,
+                message=f"模型文件不存在: {path}",
+                suggestion="请检查模型路径是否正确",
+            )
+        if p.suffix.lower() != ".gguf":
+            return CheckResult(
+                name="GGUF 模型",
+                passed=False,
+                message="模型文件必须为 .gguf 格式",
+                suggestion="请选择 .gguf 格式的模型文件",
+            )
+        if not os.access(str(p), os.R_OK):
+            return CheckResult(
+                name="GGUF 模型",
+                passed=False,
+                message=f"模型文件无读取权限: {path}",
+                suggestion="请检查文件权限",
+            )
+        return CheckResult(
+            name="GGUF 模型",
+            passed=True,
+            message=f"GGUF 模型就绪: {path}",
+        )
