@@ -80,6 +80,9 @@ class SchemaMigrator:
     @staticmethod
     def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
         """v2→v3: documents 表新增 content_hash / mtime 列用于增量更新。"""
+        if not SchemaMigrator._table_exists(conn, "documents"):
+            logger.info("documents table not found, skipping v2→v3 column migration")
+            return
         cols = {
             row["name"]
             for row in conn.execute("PRAGMA table_info(documents)").fetchall()
