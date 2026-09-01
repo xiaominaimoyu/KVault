@@ -1,0 +1,41 @@
+{
+  "name": "KVault 检索评测集示例",
+  "description": "用于评估检索质量的评测集；复制为 sample.json 后根据实际文档填写 expected_doc_ids/expected_doc_names",
+  "samples": [
+    {
+      "query": "向量检索的基本原理",
+      "expected_doc_names": ["向量检索入门.md"],
+      "expected_doc_ids": [],
+      "partition_filter": null,
+      "tag_filters": []
+    },
+    {
+      "query": "ChromaDB 的持久化配置",
+      "expected_doc_names": ["chromadb-notes.txt"],
+      "expected_doc_ids": [],
+      "partition_filter": "技术笔记",
+      "tag_filters": []
+    },
+    {
+      "query": "文本切分策略对检索的影响",
+      "expected_doc_names": ["chunking-guide.md"],
+      "expected_doc_ids": [],
+      "partition_filter": null,
+      "tag_filters": ["RAG"]
+    },
+    {
+      "query": "Ollama 嵌入模型部署",
+      "expected_doc_names": ["ollama-setup.md"],
+      "expected_doc_ids": [],
+      "partition_filter": "项目资料",
+      "tag_filters": []
+    },
+    {
+      "query": "SQLite 元数据表结构",
+      "expected_doc_names": ["metadata-schema.md"],
+      "expected_doc_ids": [],
+      "partition_filter": null,
+      "tag_filters": []
+    }
+  ]
+}
