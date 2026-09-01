@@ -164,3 +164,81 @@ class WorkspaceManager:
         ws.chroma_dir.mkdir(parents=True, exist_ok=True)
         ws.files_dir.mkdir(parents=True, exist_ok=True)
         ws.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def migrate_legacy_data(self) -> bool:
+        """迁移旧数据目录到工作区布局。
+
+        检测 data/chroma_db 存在但 data/workspaces/default 不存在时执行迁移。
+        迁移前备份到 data/.migration_backup/，失败时回滚。
+
+        Returns:
+            True 如果执行了迁移，False 如果无需迁移。
+        """
+        legacy_chroma = self._data_root / "chroma_db"
+        legacy_sqlite = self._data_root / "kb.sqlite"
+        legacy_files = self._data_root / "files"
+        default_ws = self._workspaces_root / DEFAULT_WORKSPACE_ID
+
+        has_legacy = legacy_chroma.exists() or legacy_sqlite.exists() or legacy_files.exists()
+        already_migrated = default_ws.exists() and (
+            (default_ws / "chroma_db").exists() or (default_ws / "kb.sqlite").exists()
+        )
+
+        if not has_legacy or already_migrated:
+            return False
+
+        backup_dir = self._data_root / ".migration_backup"
+        logger.info("检测到旧数据目录，开始迁移到工作区布局")
+
+        try:
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+
+            if legacy_chroma.exists():
+                shutil.move(str(legacy_chroma), str(backup_dir / "chroma_db"))
+            if legacy_sqlite.exists():
+                shutil.move(str(legacy_sqlite), str(backup_dir / "kb.sqlite"))
+            if legacy_files.exists():
+                shutil.move(str(legacy_files), str(backup_dir / "files"))
+
+            default_ws.mkdir(parents=True, exist_ok=True)
+            target_chroma = default_ws / "chroma_db"
+            target_sqlite = default_ws / "kb.sqlite"
+            target_files = default_ws / "files"
+
+            if backup_dir.exists():
+                if (backup_dir / "chroma_db").exists():
+                    shutil.move(str(backup_dir / "chroma_db"), str(target_chroma))
+                if (backup_dir / "kb.sqlite").exists():
+                    shutil.move(str(backup_dir / "kb.sqlite"), str(target_sqlite))
+                if (backup_dir / "files").exists():
+                    shutil.move(str(backup_dir / "files"), str(target_files))
+
+            self.ensure_default()
+            self._config.workspaces.current = DEFAULT_WORKSPACE_ID
+
+            backup_dir.rmdir() if backup_dir.exists() else None
+            logger.info("旧数据目录迁移完成")
+            return True
+        except Exception as e:
+            logger.error("迁移失败，开始回滚: %s", e)
+            self._rollback_migration(backup_dir, legacy_chroma, legacy_sqlite, legacy_files)
+            raise
+
+    def _rollback_migration(
+        self,
+        backup_dir: Path,
+        legacy_chroma: Path,
+        legacy_sqlite: Path,
+        legacy_files: Path,
+    ) -> None:
+        try:
+            if not legacy_chroma.exists() and (backup_dir / "chroma_db").exists():
+                shutil.move(str(backup_dir / "chroma_db"), str(legacy_chroma))
+            if not legacy_sqlite.exists() and (backup_dir / "kb.sqlite").exists():
+                shutil.move(str(backup_dir / "kb.sqlite"), str(legacy_sqlite))
+            if not legacy_files.exists() and (backup_dir / "files").exists():
+                shutil.move(str(backup_dir / "files"), str(legacy_files))
+        except Exception as e:
+            logger.error("回滚失败: %s", e)
