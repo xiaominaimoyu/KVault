@@ -65,3 +65,24 @@ def test_main_window_no_plain_setstylesheet_with_colors():
     assert "color: green" not in mw
     assert "color: red" not in mw
     assert "color: gray" not in mw
+
+
+# ---- P9 快捷键与主题运行时切换 ----
+
+def test_main_window_sets_up_shortcuts():
+    """MainWindow 应构建 ShortcutManager 完成快捷键注册。"""
+    mw = (_REPO_ROOT / "gui" / "main_window.py").read_text(encoding="utf-8")
+    assert "ShortcutManager" in mw
+    assert "_setup_shortcuts" in mw
+
+
+def test_main_window_reapplies_theme_after_settings():
+    """设置对话框保存后应重新应用主题（运行时切换）。"""
+    mw = (_REPO_ROOT / "gui" / "main_window.py").read_text(encoding="utf-8")
+    assert "_apply_theme" in mw
+
+
+def test_main_window_registers_bundled_fonts():
+    """MainWindow 启动时应注册打包字体（若存在）。"""
+    mw = (_REPO_ROOT / "gui" / "main_window.py").read_text(encoding="utf-8")
+    assert "register_bundled_fonts" in mw

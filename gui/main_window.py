@@ -1,20 +1,16 @@
 import html
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Qt, Signal
-from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
-    QHeaderView,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -23,16 +19,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
-    QProgressBar,
     QPushButton,
-    QSpinBox,
     QSplitter,
-    QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
     QTextBrowser,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -46,40 +35,22 @@ from core.retriever import Retriever
 from core.text_splitter import KnowledgeTextSplitter
 from core.vector_store import VectorStore
 from core.workspace import WorkspaceManager
+from gui.dialogs.settings_dialog import SettingsDialog
+from gui.panels.detail_panel import DetailPanel
+from gui.panels.doc_list_panel import (
+    STATUS_LABELS,
+    DocListPanel,
+    format_size,
+    format_time,
+)
+from gui.panels.nav_panel import NavPanel
+from gui.panels.status_bar import StatusBar
+from gui.panels.top_nav_bar import TopNavBar
 from gui.styles.variables import TOKENS_DARK
 from gui.workers.ingest_worker import IngestWorker
 from gui.workers.search_worker import SearchWorker
 
 logger = logging.getLogger(__name__)
-
-_STATUS_COLORS = {
-    "indexed": TOKENS_DARK["status-success"],
-    "indexing": TOKENS_DARK["status-warning"],
-    "pending": TOKENS_DARK["fg-muted"],
-    "failed": TOKENS_DARK["status-error"],
-}
-
-_STATUS_LABELS = {
-    "indexed": "已索引",
-    "indexing": "索引中",
-    "pending": "待处理",
-    "failed": "失败",
-}
-
-
-def _format_size(size: int) -> str:
-    if size < 1024:
-        return f"{size} B"
-    value = float(size)
-    for unit in ["KB", "MB", "GB"]:
-        value /= 1024
-        if value < 1024:
-            return f"{value:.1f} {unit}"
-    return f"{value / 1024:.1f} TB"
-
-
-def _format_time(ts: float) -> str:
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
 
 
 def _esc(s: str) -> str:
@@ -165,245 +136,12 @@ class IncrementalUpdateDialog(QDialog):
         self.accept()
 
 
-class ModelSwitchDialog(QDialog):
-    """嵌入模型切换对话框，编排备份→重建→校验→可回滚工作流。"""
-
-    def __init__(self, config: Config, model_manager, rebuild_fn, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("切换嵌入模型")
-        self.resize(400, 200)
-        self.config = config
-        self.model_manager = model_manager
-        self.rebuild_fn = rebuild_fn
-
-        layout = QFormLayout(self)
-        self.new_model_input = QLineEdit(config.embedding_model)
-        layout.addRow("新模型名", self.new_model_input)
-
-        self.hint = QLabel(
-            "切换将执行：备份当前索引 → 重建 → 校验 → 可回滚。\n"
-            "如重建失败将自动回滚到备份。"
-        )
-        self.hint.setWordWrap(True)
-
-        layout.addRow("", self.hint)
-
-        self.status_label = QLabel("")
-        layout.addRow("状态", self.status_label)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("开始切换")
-        buttons.accepted.connect(self._on_switch)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-
-    def _on_switch(self):
-        new_model = self.new_model_input.text().strip()
-        if not new_model:
-            QMessageBox.warning(self, "输入错误", "请输入新模型名")
-            return
-        self.status_label.setText("正在切换，请稍候...")
-        result = self.model_manager.switch_model(new_model, self.rebuild_fn)
-        if result.success:
-            self.status_label.setText("切换成功")
-            QMessageBox.information(
-                self, "成功", f"已切换到模型 {new_model}\n备份位于: {result.backup_path}"
-            )
-            self.accept()
-        else:
-            msg = f"切换失败: {result.error}"
-            if result.rolled_back:
-                msg += "\n已自动回滚到备份索引"
-            self.status_label.setText("切换失败")
-            QMessageBox.critical(self, "失败", msg)
-
-
-class SettingsDialog(QDialog):
-    def __init__(self, config: Config, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("设置")
-        self.resize(420, 360)
-        self.config = config
-
-        layout = QFormLayout(self)
-
-        self.data_dir = QLineEdit(str(config.files_dir.parent))
-        self.data_dir.setReadOnly(True)
-        layout.addRow("数据目录", self.data_dir)
-
-        self.backend_combo = QComboBox()
-        self.backend_combo.addItem("Ollama", "ollama")
-        self.backend_combo.addItem("llama.cpp", "llama_cpp")
-        backend_idx = self.backend_combo.findData(config.embedding_backend)
-        if backend_idx >= 0:
-            self.backend_combo.setCurrentIndex(backend_idx)
-        layout.addRow("嵌入后端", self.backend_combo)
-
-        self.config_stack = QStackedWidget()
-
-        ollama_panel = QWidget()
-        ollama_layout = QFormLayout(ollama_panel)
-        self.ollama_url = QLineEdit(config.ollama_base_url)
-        ollama_layout.addRow("Base URL", self.ollama_url)
-        self.model_name = QLineEdit(config.embedding_model)
-        ollama_layout.addRow("模型名", self.model_name)
-        self.config_stack.addWidget(ollama_panel)
-
-        llama_cpp_panel = QWidget()
-        llama_cpp_layout = QFormLayout(llama_cpp_panel)
-        gguf_layout = QHBoxLayout()
-        self.gguf_path = QLineEdit(config.llama_cpp.model_path)
-        gguf_layout.addWidget(self.gguf_path)
-        self.gguf_browse_btn = QPushButton("浏览...")
-        self.gguf_browse_btn.clicked.connect(self._on_gguf_browse)
-        gguf_layout.addWidget(self.gguf_browse_btn)
-        llama_cpp_layout.addRow("GGUF 模型", gguf_layout)
-        self.n_gpu_layers = QSpinBox()
-        self.n_gpu_layers.setRange(0, 100)
-        self.n_gpu_layers.setValue(config.llama_cpp.n_gpu_layers)
-        llama_cpp_layout.addRow("GPU 层数", self.n_gpu_layers)
-        self.n_ctx = QSpinBox()
-        self.n_ctx.setRange(512, 65536)
-        self.n_ctx.setValue(config.llama_cpp.n_ctx)
-        llama_cpp_layout.addRow("上下文长度", self.n_ctx)
-        self.config_stack.addWidget(llama_cpp_panel)
-
-        layout.addRow(self.config_stack)
-        self.backend_combo.currentIndexChanged.connect(self._on_backend_changed)
-
-        self.backend_status_label = QLabel()
-
-        layout.addRow("后端状态", self.backend_status_label)
-
-        self.chunk_size = QSpinBox()
-        self.chunk_size.setRange(100, 4000)
-        self.chunk_size.setValue(config.chunk_size)
-        layout.addRow("Chunk Size", self.chunk_size)
-
-        self.chunk_overlap = QSpinBox()
-        self.chunk_overlap.setRange(0, 1000)
-        self.chunk_overlap.setValue(config.chunk_overlap)
-        layout.addRow("Chunk Overlap", self.chunk_overlap)
-
-        self.chunk_hint = QLabel("提示：切分参数仅对新增索引起效，存量文档需重建索引后生效。")
-        self.chunk_hint.setWordWrap(True)
-
-        layout.addRow("", self.chunk_hint)
-
-        self.top_k = QSpinBox()
-        self.top_k.setRange(1, 50)
-        self.top_k.setValue(config.top_k)
-        layout.addRow("默认 Top-K", self.top_k)
-
-        self.threshold = QLineEdit(str(config.similarity_threshold))
-        layout.addRow("相似度阈值", self.threshold)
-
-        self.mcp_enabled = QPushButton("已启用" if config.mcp_enabled else "已禁用")
-        self.mcp_enabled.setCheckable(True)
-        self.mcp_enabled.setChecked(config.mcp_enabled)
-        self.mcp_enabled.toggled.connect(self._on_mcp_toggled)
-        layout.addRow("MCP 服务", self.mcp_enabled)
-
-        self.hybrid_enabled = QPushButton("已启用" if config.hybrid_search.enabled else "已禁用")
-        self.hybrid_enabled.setCheckable(True)
-        self.hybrid_enabled.setChecked(config.hybrid_search.enabled)
-        self.hybrid_enabled.toggled.connect(self._on_hybrid_toggled)
-        layout.addRow("混合检索", self.hybrid_enabled)
-
-        self._model_manager = getattr(parent, "_model_manager", None) if parent else None
-        self._rebuild_fn = getattr(parent, "_rebuild_all_fn", None) if parent else None
-        if self._model_manager and self._rebuild_fn:
-            self.switch_model_btn = QPushButton("切换模型...")
-            self.switch_model_btn.clicked.connect(self._on_switch_model)
-            layout.addRow("模型管理", self.switch_model_btn)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._on_save)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-
-    def _on_switch_model(self):
-        dialog = ModelSwitchDialog(
-            self.config, self._model_manager, self._rebuild_fn, parent=self
-        )
-        dialog.exec()
-
-    def _on_gguf_browse(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, "选择 GGUF 模型", "", "GGUF Models (*.gguf);;All Files (*.*)"
-        )
-        if path:
-            self.gguf_path.setText(path)
-
-    def _on_backend_changed(self, index: int):
-        self.config_stack.setCurrentIndex(index)
-        backend = self.backend_combo.itemData(index)
-        if backend == "llama_cpp":
-            from core.embedding_backends.llama_cpp_backend import LlamaCppBackend
-            tmp = LlamaCppBackend(model_path=self.gguf_path.text().strip())
-            if tmp.is_available() and tmp.is_model_available():
-                self.backend_status_label.setText("✓ llama.cpp 后端就绪")
-                self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['status-success']};")
-            elif not tmp.is_available():
-                self.backend_status_label.setText("✗ 未安装 llama-cpp-python")
-                self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['status-error']};")
-            else:
-                self.backend_status_label.setText("✗ GGUF 模型文件不存在")
-                self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['status-error']};")
-        else:
-            self.backend_status_label.setText("Ollama 后端（需启动 Ollama 服务）")
-            self.backend_status_label.setStyleSheet(f"color: {TOKENS_DARK['fg-muted']};")
-
-    def _on_mcp_toggled(self, checked: bool):
-        self.mcp_enabled.setText("已启用" if checked else "已禁用")
-
-    def _on_hybrid_toggled(self, checked: bool):
-        self.hybrid_enabled.setText("已启用" if checked else "已禁用")
-
-    def _on_save(self):
-        try:
-            threshold = float(self.threshold.text())
-        except ValueError as e:
-            QMessageBox.warning(self, "Input Error", f"Invalid similarity threshold: {e}")
-            return
-
-        self.config.ollama_base_url = self.ollama_url.text().strip()
-        self.config.embedding_model = self.model_name.text().strip()
-        self.config.embedding_backend = self.backend_combo.currentData()
-        if self.config.embedding_backend == "llama_cpp":
-            self.config.llama_cpp.model_path = self.gguf_path.text().strip()
-            self.config.llama_cpp.n_gpu_layers = self.n_gpu_layers.value()
-            self.config.llama_cpp.n_ctx = self.n_ctx.value()
-        self.config.chunk_size = self.chunk_size.value()
-        self.config.chunk_overlap = self.chunk_overlap.value()
-        self.config.top_k = self.top_k.value()
-        self.config.similarity_threshold = threshold
-        self.config.mcp_enabled = self.mcp_enabled.isChecked()
-        self.config.hybrid_search.enabled = self.hybrid_enabled.isChecked()
-
-        errors = self.config.validate()
-        if errors:
-            QMessageBox.warning(
-                self,
-                "配置校验失败",
-                "以下配置项存在问题，已阻止保存：\n\n• " + "\n• ".join(errors),
-            )
-            return
-
-        self.config.save()
-        self.accept()
-
-
 class MainWindow(QMainWindow):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
 
-        from gui.styles.apply import apply_theme
-        from PySide6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app is not None:
-            apply_theme(app, getattr(config, "theme", "dark"))
+        self._apply_theme(getattr(config, "theme", "dark"))
 
         self.parser = DocumentParser()
         self.splitter = KnowledgeTextSplitter(
@@ -443,240 +181,146 @@ class MainWindow(QMainWindow):
         self._setup_toolbar()
         self._setup_central_layout()
         self._setup_status_bar()
+        self._setup_shortcuts()
+
+        # 注册打包字体（gui/styles/fonts/ 存在时）
+        from gui.styles.fonts import register_bundled_fonts
+        register_bundled_fonts()
 
         self._reload_all()
         self._check_environment()
 
+    def _apply_theme(self, theme: str) -> str:
+        """应用主题到 QApplication（dark / light / system）。"""
+        from PySide6.QtWidgets import QApplication
+
+        from gui.styles.apply import apply_theme
+
+        app = QApplication.instance()
+        if app is None:
+            return "dark"
+        return apply_theme(app, theme)
+
+    def _setup_shortcuts(self):
+        """注册全局键盘快捷键（设计规范 5.6）。"""
+        from gui.shortcuts import ShortcutManager
+
+        handlers = {
+            "import_docs": self._on_import,
+            "focus_global_search": self.top_nav_bar.focus_global_search,
+            "focus_semantic_search": self._focus_semantic_search,
+            "open_settings": self._open_settings,
+            "refresh_status": self._refresh_status_panel,
+            "delete_selected": self._delete_selected_docs,
+            "clear_selection": self.doc_list_panel.clear_selection,
+            "tab_preview": self.detail_panel.switch_to_preview,
+            "tab_search": self.detail_panel.switch_to_search,
+            "tab_metadata": self.detail_panel.switch_to_metadata,
+        }
+        self._shortcut_manager = ShortcutManager(self, handlers)
+
+    def _focus_semantic_search(self):
+        """Ctrl+K：切到检索标签页并聚焦检索输入框。"""
+        self.detail_panel.switch_to_search()
+        self.detail_panel.search_tab.focus_search()
+
     def _setup_toolbar(self):
-        toolbar = self.addToolBar("工具栏")
-        self.import_btn = QPushButton("导入文档")
-        self.import_btn.clicked.connect(self._on_import)
-        toolbar.addWidget(self.import_btn)
-
-        toolbar.addSeparator()
-        self.global_search = QLineEdit()
-        self.global_search.setPlaceholderText("全局搜索：文件名 / 扩展名 / 分区 / 标签")
-        self.global_search.setMinimumWidth(280)
-        self.global_search.textChanged.connect(self._on_global_search_changed)
-        toolbar.addWidget(self.global_search)
-
-        toolbar.addSeparator()
-        settings_btn = QPushButton("设置")
-        settings_btn.clicked.connect(self._open_settings)
-        toolbar.addWidget(settings_btn)
-
-        logs_btn = QPushButton("日志")
-        logs_btn.clicked.connect(self._open_logs_dir)
-        toolbar.addWidget(logs_btn)
+        self.top_nav_bar = TopNavBar(self.config)
+        self.top_nav_bar.importRequested.connect(self._on_import)
+        self.top_nav_bar.searchChanged.connect(self._on_global_search_changed)
+        self.top_nav_bar.settingsRequested.connect(self._open_settings)
+        self.top_nav_bar.logsRequested.connect(self._open_logs_dir)
+        self.top_nav_bar.workspaceSwitchRequested.connect(self._switch_workspace)
+        self.top_nav_bar.workspaceCreateRequested.connect(self._on_workspace_create)
+        self.top_nav_bar.workspaceDeleteRequested.connect(self._on_workspace_delete)
 
     def _setup_central_layout(self):
+        self.status_bar = StatusBar()
+
+
+        container = QWidget()
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        main_layout.addWidget(self.top_nav_bar)
+
         splitter = QSplitter(Qt.Horizontal)
 
         self.nav_panel = self._build_nav_panel()
         self.nav_panel.setMinimumWidth(220)
         self.nav_panel.setMaximumWidth(320)
 
-        self.doc_table = QTableWidget(0, 7)
-        self.doc_table.setHorizontalHeaderLabels(
-            ["文件名", "格式", "大小", "状态", "块数", "导入时间", "doc_id"]
+        self.doc_list_panel = DocListPanel(
+            reduce_motion=getattr(self.config, "reduce_motion", False)
         )
-        self.doc_table.hideColumn(6)
-        self.doc_table.horizontalHeader().setStretchLastSection(False)
-        self.doc_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.doc_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.doc_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.doc_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.doc_table.itemSelectionChanged.connect(self._on_document_selected)
-        self.doc_table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.doc_table.customContextMenuRequested.connect(self._show_document_context_menu)
+        self.doc_list_panel.documentSelected.connect(self._on_document_selected_id)
+        self.doc_list_panel.contextMenuRequested.connect(self._show_document_context_menu)
+        self.doc_list_panel.importRequested.connect(self._on_import)
+        self.doc_list_panel.filesDropped.connect(self._import_paths)
+        self.doc_list_panel.batchActionRequested.connect(self._on_batch_action)
 
-        self.preview = QTextBrowser()
-        self.preview.setPlaceholderText("选择文档以预览内容")
-
-        self.retrieval_panel = self._build_retrieval_panel()
-
-        right_splitter = QSplitter(Qt.Vertical)
-        right_splitter.addWidget(self.preview)
-        right_splitter.addWidget(self.retrieval_panel)
-        right_splitter.setSizes([420, 320])
+        self.detail_panel = DetailPanel(default_top_k=self.config.top_k)
+        self.detail_panel.searchRequested.connect(self._on_search)
+        self.detail_panel.resultClicked.connect(self._on_result_clicked)
 
         splitter.addWidget(self.nav_panel)
-        splitter.addWidget(self.doc_table)
-        splitter.addWidget(right_splitter)
+        splitter.addWidget(self.doc_list_panel)
+        splitter.addWidget(self.detail_panel)
         splitter.setSizes([220, 500, 680])
 
-        container = QWidget()
-        layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(splitter)
+        main_layout.addWidget(splitter, 1)
+        main_layout.addWidget(self.status_bar)
         self.setCentralWidget(container)
 
-    def _build_nav_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(10)
-
-        # Workspace selector
-        layout.addWidget(QLabel("<b>工作区</b>"))
-        ws_layout = QHBoxLayout()
-        self.workspace_combo = QComboBox()
-        self.workspace_combo.currentIndexChanged.connect(self._on_workspace_switch)
-        ws_layout.addWidget(self.workspace_combo, 1)
-        self.ws_create_btn = QPushButton("新建")
-        self.ws_create_btn.clicked.connect(self._on_workspace_create)
-        ws_layout.addWidget(self.ws_create_btn)
-        self.ws_delete_btn = QPushButton("删除")
-        self.ws_delete_btn.clicked.connect(self._on_workspace_delete)
-        ws_layout.addWidget(self.ws_delete_btn)
-        layout.addLayout(ws_layout)
-        self._reload_workspace_combo()
-
-        # Partition tree
-        layout.addWidget(QLabel("<b>分区</b>"))
-        self.partition_tree = QTreeWidget()
-        self.partition_tree.setHeaderHidden(True)
-        self.partition_tree.itemClicked.connect(self._on_partition_selected)
-        self.partition_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.partition_tree.customContextMenuRequested.connect(
-            self._show_partition_context_menu
-        )
-        layout.addWidget(self.partition_tree)
-
-        # Tag cloud
-        layout.addWidget(QLabel("<b>标签</b>"))
-        self.tag_list = QListWidget()
-        self.tag_list.itemClicked.connect(self._on_tag_selected)
-        layout.addWidget(self.tag_list)
-
-        # Status panel
-        layout.addWidget(QLabel("<b>向量库状态</b>"))
-        self.status_panel = QTextBrowser()
-        self.status_panel.setMaximumHeight(140)
-        layout.addWidget(self.status_panel)
-
-        refresh_btn = QPushButton("刷新状态")
-        refresh_btn.clicked.connect(self._refresh_status_panel)
-        layout.addWidget(refresh_btn)
-
-        return panel
-
-    def _build_retrieval_panel(self) -> QWidget:
-        panel = QWidget()
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(8, 8, 8, 8)
-
-        header = QLabel("<b>语义检索测试</b>")
-        layout.addWidget(header)
-
-        input_layout = QHBoxLayout()
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("输入自然语言查询...")
-        self.search_input.returnPressed.connect(self._on_search)
-        self.search_btn = QPushButton("检索")
-        self.search_btn.clicked.connect(self._on_search)
-        self.top_k_spin = QSpinBox()
-        self.top_k_spin.setRange(1, 20)
-        self.top_k_spin.setValue(self.config.top_k)
-        self.top_k_spin.setPrefix("Top-")
-        input_layout.addWidget(self.search_input, 1)
-        input_layout.addWidget(self.top_k_spin)
-        input_layout.addWidget(self.search_btn)
-        layout.addLayout(input_layout)
-
-        self.result_list = QListWidget()
-        self.result_list.setSpacing(4)
-        self.result_list.itemClicked.connect(self._on_result_clicked)
-        layout.addWidget(self.result_list)
-
+    def _build_nav_panel(self) -> NavPanel:
+        panel = NavPanel(default_partition_id=DEFAULT_PARTITION_ID)
+        panel.partitionSelected.connect(self._on_partition_selected_id)
+        panel.tagSelected.connect(self._on_tag_selected_id)
+        panel.partitionCreateRequested.connect(self._create_partition)
+        panel.partitionRenameRequested.connect(self._rename_partition)
+        panel.partitionDeleteRequested.connect(self._delete_partition)
+        panel.refreshStatsRequested.connect(self._refresh_status_panel)
         return panel
 
     def _setup_status_bar(self):
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMaximumWidth(200)
-        self.progress_bar.setVisible(False)
-        self.statusBar().addPermanentWidget(self.progress_bar)
-        self.statusBar().showMessage("本地运行 · 就绪")
+        self.progress_bar = self.status_bar._progress_bar
+        self.status_bar.show_message("本地运行 · 就绪")
 
     def _check_environment(self):
         if not self.embedder.is_available():
-            self.statusBar().showMessage("Ollama 服务未启动，请检查设置")
+            self.status_bar.show_message("Ollama 服务未启动，请检查设置")
             logger.warning("Ollama 服务不可访问")
         elif not self.embedder.is_model_available():
-            self.statusBar().showMessage(f"模型未就绪: {self.config.embedding_model}")
+            self.status_bar.show_message(f"模型未就绪: {self.config.embedding_model}")
             logger.warning("模型不可用: %s", self.config.embedding_model)
         else:
-            self.statusBar().showMessage("本地运行 · 就绪")
+            self.status_bar.show_message("本地运行 · 就绪")
 
     def _reload_all(self):
+        self._reload_workspace_combo()
         self._reload_nav_panel()
         self._reload_document_list()
         self._refresh_status_panel()
 
     def _reload_nav_panel(self):
-        self.partition_tree.clear()
-        all_item = QTreeWidgetItem(self.partition_tree)
-        all_item.setText(0, "所有文档")
-        stats = self.metadata.get_stats()
-        all_item.setText(0, f"所有文档 ({stats.get('total_docs', 0)})")
-        all_item.setData(0, Qt.UserRole, "")
-        all_item.setSelected(self._current_partition_id is None and self._current_tag_id is None)
+        self.nav_panel.set_partitions(
+            self.metadata.list_partitions_with_counts(),
+            current_id=self._current_partition_id,
+        )
+        self.nav_panel.set_tags(
+            self.metadata.list_tags_with_counts(),
+            current_id=self._current_tag_id,
+        )
 
-        partitions = self.metadata.list_partitions_with_counts()
-        for p in partitions:
-            item = QTreeWidgetItem(self.partition_tree)
-            item.setText(0, f"{p['name']} ({p['doc_count']})")
-            item.setData(0, Qt.UserRole, p["id"])
-            item.setSelected(p["id"] == self._current_partition_id)
-
-        self.partition_tree.expandAll()
-
-        self.tag_list.clear()
-        all_tags = QListWidgetItem("全部标签")
-        all_tags.setData(Qt.UserRole, "")
-        self.tag_list.addItem(all_tags)
-        if self._current_tag_id is None:
-            self.tag_list.setCurrentItem(all_tags)
-
-        tags = self.metadata.list_tags_with_counts()
-        for t in tags:
-            item = QListWidgetItem(f"{t['name']} ({t['doc_count']})")
-            item.setData(Qt.UserRole, t["id"])
-            self.tag_list.addItem(item)
-            if t["id"] == self._current_tag_id:
-                self.tag_list.setCurrentItem(item)
-
-    def _on_partition_selected(self, item: QTreeWidgetItem):
-        self._current_partition_id = item.data(0, Qt.UserRole) or None
+    def _on_partition_selected_id(self, partition_id):
+        self._current_partition_id = partition_id
         self._current_tag_id = None
-        self.tag_list.clearSelection()
         self._reload_document_list()
 
-    def _on_tag_selected(self, item: QListWidgetItem):
-        self._current_tag_id = item.data(Qt.UserRole) or None
+    def _on_tag_selected_id(self, tag_id):
+        self._current_tag_id = tag_id
         self._current_partition_id = None
-        self.partition_tree.clearSelection()
         self._reload_document_list()
-
-    def _show_partition_context_menu(self, position):
-        item = self.partition_tree.itemAt(position)
-        partition_id = item.data(0, Qt.UserRole) if item else ""
-
-        menu = QMenu(self)
-        add_action = QAction("新建分区", self)
-        add_action.triggered.connect(self._create_partition)
-        menu.addAction(add_action)
-
-        if partition_id and partition_id != DEFAULT_PARTITION_ID:
-            rename_action = QAction("重命名分区", self)
-            rename_action.triggered.connect(lambda: self._rename_partition(partition_id))
-            menu.addAction(rename_action)
-
-            delete_action = QAction("删除分区", self)
-            delete_action.triggered.connect(lambda: self._delete_partition(partition_id))
-            menu.addAction(delete_action)
-
-        menu.exec(self.partition_tree.mapToGlobal(position))
 
     def _create_partition(self):
         name, ok = QInputDialog.getText(self, "新建分区", "分区名称:")
@@ -716,15 +360,17 @@ class MainWindow(QMainWindow):
     def _refresh_status_panel(self):
         stats = self.metadata.get_stats()
         chroma_count = self.vector_store.count()
-        lines = [
-            f"总文档数: {stats.get('total_docs', 0)}",
+        model_name = self.config.embedding_model.split('/')[-1]
+        summary = (
+            f"{stats.get('total_docs', 0)} 文档 · "
+            f"{stats.get('total_chunks', 0)} 块 · {model_name}"
+        )
+        details = [
             f"已索引: {stats.get('indexed_docs', 0)}",
             f"失败: {stats.get('failed_docs', 0)}",
-            f"总块数: {stats.get('total_chunks', 0)}",
             f"向量数: {chroma_count}",
-            f"模型: {self.config.embedding_model.split('/')[-1]}",
         ]
-        self.status_panel.setHtml("<br>".join(_esc(line) for line in lines))
+        self.nav_panel.set_stats(summary, details)
 
     def _on_import(self):
         paths, _ = QFileDialog.getOpenFileNames(
@@ -735,21 +381,49 @@ class MainWindow(QMainWindow):
         )
         if not paths:
             return
+        self._import_paths(paths)
+
+    def _import_paths(self, paths: list[str]):
+        """按给定路径列表启动导入（文件对话框 / 拖拽共用）。"""
+        if not paths:
+            return
 
         partition_id = self._current_partition_id or DEFAULT_PARTITION_ID
 
-        self.import_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
         self._ingest_worker = IngestWorker(
-            file_paths=paths,
+            file_paths=list(paths),
             ingest_fn=lambda p: self._ingest_with_partition(p, partition_id),
         )
         self._ingest_worker.progress.connect(self._on_ingest_progress)
         self._ingest_worker.file_done.connect(self._on_ingest_file_done)
         self._ingest_worker.finished_all.connect(self._on_ingest_finished)
         self._ingest_worker.start()
+
+    def _on_batch_action(self, action_id: str, doc_ids: list[str]):
+        """批量操作浮动条入口，分发到既有的批量处理器。"""
+        if not doc_ids:
+            return
+        if action_id == "move":
+            self._show_batch_move_menu(doc_ids)
+        elif action_id == "tag":
+            self._edit_tags_for_selected()
+        elif action_id == "reindex":
+            self._reindex_selected()
+        elif action_id == "delete":
+            self._delete_selected_docs()
+
+    def _show_batch_move_menu(self, doc_ids: list[str]):
+        from PySide6.QtGui import QCursor
+
+        menu = QMenu(self)
+        for p in self.metadata.list_partitions():
+            action = QAction(p["name"], self)
+            action.triggered.connect(lambda checked, pid=p["id"]: self._move_selected_docs(pid))
+            menu.addAction(action)
+        menu.exec(QCursor.pos())
 
     def _ingest_with_partition(self, path: str, partition_id: str) -> str:
         return ingest_document(
@@ -765,25 +439,24 @@ class MainWindow(QMainWindow):
 
     def _on_ingest_progress(self, percent: int, file_name: str):
         self.progress_bar.setValue(percent)
-        self.statusBar().showMessage(f"正在索引: {file_name} ({percent}%)")
+        self.status_bar.show_message(f"正在索引: {file_name} ({percent}%)")
 
     def _on_ingest_file_done(self, doc_id: str, success: bool, file_name: str, error: str):
         if success:
-            self.statusBar().showMessage(f"导入完成: {file_name}")
+            self.status_bar.show_message(f"导入完成: {file_name}")
             logger.info("导入成功: %s -> %s", file_name, doc_id)
         else:
             QMessageBox.critical(self, "导入失败", f"{file_name}\n{error}")
-            self.statusBar().showMessage(f"导入失败: {file_name}")
+            self.status_bar.show_message(f"导入失败: {file_name}")
             logger.error("导入失败: %s - %s", file_name, error)
         self._reload_all()
 
     def _on_ingest_finished(self, success_count: int, fail_count: int):
-        self.import_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         msg = f"批量导入完成: 成功 {success_count} 个"
         if fail_count:
             msg += f", 失败 {fail_count} 个"
-        self.statusBar().showMessage(msg)
+        self.status_bar.show_message(msg)
         self._check_environment()
 
     def _reload_document_list(self):
@@ -795,7 +468,6 @@ class MainWindow(QMainWindow):
         self._apply_document_filter()
 
     def _apply_document_filter(self):
-        self.doc_table.setRowCount(0)
         keyword = self._current_filter.strip().lower()
 
         docs = self._all_documents
@@ -812,50 +484,26 @@ class MainWindow(QMainWindow):
                 )
             ]
 
-        for doc in docs:
-            row = self.doc_table.rowCount()
-            self.doc_table.insertRow(row)
-            self.doc_table.setItem(row, 0, QTableWidgetItem(doc.file_name))
-            self.doc_table.setItem(row, 1, QTableWidgetItem(doc.file_ext.upper()))
-            self.doc_table.setItem(row, 2, QTableWidgetItem(_format_size(doc.file_size)))
+        self.doc_list_panel.set_documents(docs)
 
-            status_item = QTableWidgetItem(_STATUS_LABELS.get(doc.status, doc.status))
-            color = _STATUS_COLORS.get(doc.status, TOKENS_DARK["fg-muted"])
-            status_item.setForeground(self._color_brush(color))
-            self.doc_table.setItem(row, 3, status_item)
-
-            chunk_item = QTableWidgetItem(str(doc.chunk_count))
-            chunk_item.setTextAlignment(Qt.AlignCenter)
-            self.doc_table.setItem(row, 4, chunk_item)
-
-            self.doc_table.setItem(row, 5, QTableWidgetItem(_format_time(doc.created_at)))
-
-            doc_id_item = QTableWidgetItem(doc.id)
-            self.doc_table.setItem(row, 6, doc_id_item)
-
-    def _on_document_selected(self):
-        selected = self.doc_table.selectedItems()
-        if not selected:
-            self._current_doc_id = None
-            self.preview.clear()
-            return
-
-        row = selected[0].row()
-        doc_id = self.doc_table.item(row, 6).text()
+    def _on_document_selected_id(self, doc_id):
         self._current_doc_id = doc_id
+        if doc_id is None:
+            self.detail_panel.preview_tab.clear_preview()
+            return
         self._load_preview(doc_id)
 
     def _load_preview(self, doc_id: str):
         doc = self.metadata.get_document(doc_id)
         if doc is None:
-            self.preview.setText("文档不存在")
+            self.detail_panel.preview_tab.set_html("文档不存在")
             return
 
         lines = [
             f"<h2>{_esc(doc.file_name)}</h2>",
             f"<p><b>格式:</b> {_esc(doc.file_ext.upper())} &nbsp; "
-            f"<b>大小:</b> {_format_size(doc.file_size)} &nbsp; "
-            f"<b>状态:</b> {_esc(_STATUS_LABELS.get(doc.status, doc.status))} &nbsp; "
+            f"<b>大小:</b> {format_size(doc.file_size)} &nbsp; "
+            f"<b>状态:</b> {_esc(STATUS_LABELS.get(doc.status, doc.status))} &nbsp; "
             f"<b>块数:</b> {doc.chunk_count}</p>",
             f"<p><b>分区:</b> {_esc(doc.partition_name or '未分类')} &nbsp; "
             f"<b>标签:</b> {_esc(', '.join(t['name'] for t in self.metadata.get_document_tags(doc.id)))}</p>",
@@ -888,38 +536,56 @@ class MainWindow(QMainWindow):
         else:
             lines.append("<p>文档尚未完成索引，暂无预览。</p>")
 
-        self.preview.setHtml("\n".join(lines))
+        self.detail_panel.preview_tab.set_html("\n".join(lines))
+        self._load_metadata(doc)
+        self.detail_panel.switch_to_preview()
+
+    def _load_metadata(self, doc):
+        pairs = [
+            ("文档 ID", doc.id),
+            ("文件名", doc.file_name),
+            ("格式", doc.file_ext.upper()),
+            ("大小", format_size(doc.file_size)),
+            ("状态", STATUS_LABELS.get(doc.status, doc.status)),
+            ("块数", str(doc.chunk_count)),
+            ("分区", doc.partition_name or "未分类"),
+            ("标签", ", ".join(t["name"] for t in self.metadata.get_document_tags(doc.id))),
+            ("存储路径", doc.stored_path),
+            ("导入时间", format_time(doc.created_at)),
+        ]
+        if doc.status == "failed" and doc.error_message:
+            pairs.append(("错误信息", doc.error_message))
+        self.detail_panel.metadata_tab.set_metadata(pairs)
 
     def _on_global_search_changed(self, text: str):
         self._current_filter = text
         self._apply_document_filter()
 
-    def _on_search(self):
-        query = self.search_input.text().strip()
+    def _on_search(self, query: str, top_k: int):
+        query = (query or "").strip()
         if not query:
-            self.result_list.clear()
+            self.detail_panel.search_tab.clear_results()
             return
 
         filters = self._build_search_filters()
         if filters and filters.get("_empty"):
-            self.result_list.clear()
-            self.result_list.addItem("未找到相关结果")
-            self.statusBar().showMessage("检索完成：无结果")
+            self.detail_panel.search_tab.show_results([], self._score_color)
+            self.status_bar.show_message("检索完成：无结果")
             return
 
-        self.search_btn.setEnabled(False)
-        self.statusBar().showMessage("正在检索...")
+        self.detail_panel.search_tab.set_busy(True)
+        self.status_bar.show_message("正在检索...")
 
         self._search_worker = SearchWorker(
             retriever=self.retriever,
             query=query,
-            top_k=self.top_k_spin.value(),
+            top_k=top_k,
             filters=filters,
         )
         self._search_worker.results.connect(self._on_search_results)
         self._search_worker.error.connect(self._on_search_error)
         self._search_worker.finished.connect(
-            lambda: self.search_btn.setEnabled(True)
+            lambda: self.detail_panel.search_tab.set_busy(False)
         )
         self._search_worker.start()
 
@@ -937,57 +603,38 @@ class MainWindow(QMainWindow):
         return {"document_id": {"$in": doc_ids}}
 
     def _on_search_results(self, results):
-        self.result_list.clear()
+        self.detail_panel.search_tab.show_results(results, self._score_color)
+        self.detail_panel.switch_to_search()
         if not results:
-            self.result_list.addItem("未找到相关结果")
-            self.statusBar().showMessage("检索完成：无结果")
+            self.status_bar.show_message("检索完成：无结果")
             return
-
-        for result in results:
-            color = self._score_color(result.score)
-            item = QListWidgetItem()
-            item.setText(
-                f"{result.document_name} · 块 {result.chunk_index + 1} · "
-                f"相似度 {result.score:.2f}"
-            )
-            item.setToolTip(result.content[:300])
-            item.setData(Qt.UserRole, result)
-            item.setForeground(self._color_brush(color))
-            self.result_list.addItem(item)
-
-        self.statusBar().showMessage(f"检索完成：{len(results)} 条结果")
+        self.status_bar.show_message(f"检索完成：{len(results)} 条结果")
 
     def _on_search_error(self, error: str):
-        self.result_list.clear()
-        self.result_list.addItem(f"检索失败: {error}")
-        self.statusBar().showMessage("检索失败")
+        self.detail_panel.search_tab.show_error(error)
+        self.status_bar.show_message("检索失败")
         logger.error("检索失败: %s", error)
 
-    def _on_result_clicked(self, item: QListWidgetItem):
-        result = item.data(Qt.UserRole)
+    def _on_result_clicked(self, result):
         if result is None:
             return
 
         document_id = result.document_id
-        for row in range(self.doc_table.rowCount()):
-            if self.doc_table.item(row, 6).text() == document_id:
-                self.doc_table.selectRow(row)
-                self._load_preview_with_chunk(document_id, result.chunk_index)
-                break
+        if self.doc_list_panel.select_doc(document_id):
+            self._load_preview_with_chunk(document_id, result.chunk_index)
 
     def _load_preview_with_chunk(self, doc_id: str, chunk_index: int):
         self._load_preview(doc_id)
         chunks = self.metadata.get_document_chunks(doc_id)
         if 0 <= chunk_index < len(chunks):
             preview = _esc(chunks[chunk_index]["content_preview"])
-            self.preview.append(
-                f"<hr><h3>检索命中块 {chunk_index + 1}</h3>"
+            self.detail_panel.preview_tab.append_hit_chunk(
+                f"<h3>检索命中块 {chunk_index + 1}</h3>"
                 f"<p>{preview}</p>"
             )
 
-    def _show_document_context_menu(self, position):
-        rows = set(idx.row() for idx in self.doc_table.selectedIndexes())
-        if not rows:
+    def _show_document_context_menu(self, global_pos, doc_ids: list[str]):
+        if not doc_ids:
             return
 
         menu = QMenu(self)
@@ -1011,10 +658,8 @@ class MainWindow(QMainWindow):
         reindex_action.triggered.connect(self._reindex_selected)
         menu.addAction(reindex_action)
 
-        if len(rows) == 1:
-            row = list(rows)[0]
-            doc_id = self.doc_table.item(row, 6).text()
-            doc = self.metadata.get_document(doc_id)
+        if len(doc_ids) == 1:
+            doc = self.metadata.get_document(doc_ids[0])
             if doc and doc.status == "failed":
                 error_action = QAction("查看错误详情", self)
                 error_action.triggered.connect(lambda: QMessageBox.critical(
@@ -1027,11 +672,10 @@ class MainWindow(QMainWindow):
         delete_action.triggered.connect(self._delete_selected_docs)
         menu.addAction(delete_action)
 
-        menu.exec(self.doc_table.mapToGlobal(position))
+        menu.exec(global_pos)
 
     def _get_selected_doc_ids(self) -> list[str]:
-        rows = set(idx.row() for idx in self.doc_table.selectedIndexes())
-        return [self.doc_table.item(row, 6).text() for row in rows]
+        return self.doc_list_panel.selected_doc_ids()
 
     def _open_selected_original(self):
         for doc_id in self._get_selected_doc_ids():
@@ -1087,7 +731,6 @@ class MainWindow(QMainWindow):
         if not doc_ids:
             return
 
-        self.import_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
@@ -1109,21 +752,20 @@ class MainWindow(QMainWindow):
 
     def _on_reindex_file_done(self, doc_id: str, success: bool, original_id: str, error: str):
         if success:
-            self.statusBar().showMessage(f"重新索引完成: {original_id}")
+            self.status_bar.show_message(f"重新索引完成: {original_id}")
             logger.info("重新索引成功: %s -> %s", original_id, doc_id)
         else:
             QMessageBox.critical(self, "重新索引失败", f"{original_id}\n{error}")
-            self.statusBar().showMessage(f"重新索引失败: {original_id}")
+            self.status_bar.show_message(f"重新索引失败: {original_id}")
             logger.error("重新索引失败: %s - %s", original_id, error)
         self._reload_all()
 
     def _on_reindex_finished(self, success_count: int, fail_count: int):
-        self.import_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         msg = f"重新索引完成: 成功 {success_count} 个"
         if fail_count:
             msg += f", 失败 {fail_count} 个"
-        self.statusBar().showMessage(msg)
+        self.status_bar.show_message(msg)
 
     def _delete_selected_docs(self):
         doc_ids = self._get_selected_doc_ids()
@@ -1148,14 +790,18 @@ class MainWindow(QMainWindow):
                 logger.exception("删除文档失败: %s", doc_id)
                 QMessageBox.critical(self, "删除失败", f"{doc_id}\n{e}")
 
-        self.statusBar().showMessage(f"已删除 {deleted} 个文档")
+        self.status_bar.show_message(f"已删除 {deleted} 个文档")
         self._current_doc_id = None
         self._reload_all()
 
     def _open_settings(self):
         old_backend = self.config.embedding_backend
+        old_theme = getattr(self.config, "theme", "dark")
         dialog = SettingsDialog(self.config, self)
         if dialog.exec() == QDialog.Accepted:
+            # 主题运行时切换（无需重启）
+            if self.config.theme != old_theme:
+                self._apply_theme(self.config.theme)
             self.splitter = KnowledgeTextSplitter(
                 chunk_size=self.config.chunk_size,
                 chunk_overlap=self.config.chunk_overlap,
@@ -1191,32 +837,22 @@ class MainWindow(QMainWindow):
             return TOKENS_DARK["status-warning"]
         return TOKENS_DARK["status-error"]
 
-    def _color_brush(self, color: str):
-        return QBrush(QColor(color))
-
     def _reload_workspace_combo(self):
-        self.workspace_combo.blockSignals(True)
-        self.workspace_combo.clear()
-        for ws in self._workspace_manager.list_workspaces():
-            label = f"{ws.name} ({ws.id})" if ws.id != "default" else f"{ws.name}"
-            self.workspace_combo.addItem(label, ws.id)
-        current_id = self._workspace_manager.config.workspaces.current
-        idx = self.workspace_combo.findData(current_id)
-        if idx >= 0:
-            self.workspace_combo.setCurrentIndex(idx)
-        self.workspace_combo.blockSignals(False)
+        workspaces = [
+            (ws.id, ws.name) for ws in self._workspace_manager.list_workspaces()
+        ]
+        self.top_nav_bar.set_workspaces(
+            workspaces, self._workspace_manager.config.workspaces.current
+        )
 
-    def _on_workspace_switch(self, index: int):
-        if index < 0:
-            return
-        ws_id = self.workspace_combo.itemData(index)
+    def _switch_workspace(self, ws_id: str):
         if not ws_id or ws_id == self._workspace_manager.config.workspaces.current:
             return
         try:
             self._workspace_manager.switch(ws_id)
             self._rebuild_services_for_workspace()
             self._reload_all()
-            self.statusBar().showMessage(f"已切换到工作区: {ws_id}", 3000)
+            self.status_bar.show_message(f"已切换到工作区: {ws_id}", 3000)
         except Exception as e:
             QMessageBox.warning(self, "切换失败", str(e))
 
@@ -1227,12 +863,12 @@ class MainWindow(QMainWindow):
         try:
             self._workspace_manager.create(name.strip())
             self._reload_workspace_combo()
-            self.statusBar().showMessage(f"已创建工作区: {name.strip()}", 3000)
+            self.status_bar.show_message(f"已创建工作区: {name.strip()}", 3000)
         except Exception as e:
             QMessageBox.warning(self, "创建失败", str(e))
 
     def _on_workspace_delete(self):
-        ws_id = self.workspace_combo.currentData()
+        ws_id = self._workspace_manager.config.workspaces.current
         if not ws_id:
             return
         if ws_id == "default":
@@ -1249,7 +885,7 @@ class MainWindow(QMainWindow):
             self._workspace_manager.delete(ws_id, archive=True)
             self._reload_workspace_combo()
             self._reload_all()
-            self.statusBar().showMessage(f"已归档工作区: {ws_id}", 3000)
+            self.status_bar.show_message(f"已归档工作区: {ws_id}", 3000)
         except Exception as e:
             QMessageBox.warning(self, "删除失败", str(e))
 

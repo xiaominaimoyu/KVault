@@ -1,5 +1,5 @@
-/* KVault Vault Standard — 深色主题 QSS 模板
-   所有色值/尺寸通过占位符引用 variables.py 中的 Token。
+/* KVault Vault Standard — 浅色主题 QSS 模板
+   与深色模板共用同一占位符结构，插值时使用 TOKENS_LIGHT。
    禁止硬编码色值。 */
 
 /* === 全局 === */
@@ -548,7 +548,7 @@ QPushButton#ViewToggleButton:checked {
 
 /* === 批量操作浮动条 === */
 QFrame#FloatingActionBar {
-    background-color: %(bg-raised)s;
+    background-color: %(bg-surface)s;
     border: 1px solid %(fg-faint)s;
     border-radius: 8px;
 }
@@ -566,7 +566,7 @@ QPushButton#FloatingActionButton {
     font-size: 12px;
 }
 QPushButton#FloatingActionButton:hover {
-    background-color: %(bg-surface)s;
+    background-color: %(bg-raised)s;
     border: 1px solid %(fg-faint)s;
 }
 QPushButton#FloatingActionButton:pressed {
@@ -575,7 +575,7 @@ QPushButton#FloatingActionButton:pressed {
 
 /* === 拖拽导入遮罩 === */
 QLabel#DropOverlay {
-    background-color: rgba(45, 212, 191, 0.12);
+    background-color: rgba(13, 148, 136, 0.10);
     border: 2px dashed %(accent-primary)s;
     border-radius: 8px;
     color: %(accent-primary)s;
@@ -604,7 +604,7 @@ QFrame#DocCard:hover {
 }
 QFrame#DocCard[selected="true"] {
     border: 1px solid %(accent-primary)s;
-    background-color: rgba(45, 212, 191, 0.06);
+    background-color: rgba(13, 148, 136, 0.05);
 }
 QLabel#DocCardName {
     color: %(fg-primary)s;
@@ -632,7 +632,7 @@ QLabel#EmptyStateSubtitle {
 }
 QPushButton#EmptyStateCta {
     background-color: %(accent-primary)s;
-    color: %(bg-vault)s;
+    color: %(bg-surface)s;
     border: none;
     border-radius: 6px;
     padding: 8px 20px;
