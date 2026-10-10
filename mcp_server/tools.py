@@ -52,6 +52,8 @@ def _get_services(workspace: Optional[str] = None) -> tuple | None:
         model=config.embedding_model,
         base_url=config.ollama_base_url,
         batch_size=config.embedding_batch_size,
+        # 必须传入完整配置，否则 llama.cpp 后端会被静默降级为 Ollama
+        config=config,
     )
     retriever = Retriever(
         embedder=embedder,

@@ -428,7 +428,14 @@ class TestDocIsUnchanged:
         assert "class SearchResult" in src
 
     def test_main_entry_unchanged_signature(self):
-        """§10.3 main.py 入口零改动即可启动。"""
+        """§10.3 main.py 入口零改动即可启动。
+
+        启动不得被本地模型可用性阻断，因此 MainWindow 接收能力探测结果
+        （缺省时自行探测）而非被检查门禁拦截。
+        """
         src = _src("main.py")
         assert "def main():" in src
-        assert "MainWindow(config)" in src
+        assert "MainWindow(config" in src
+        # 能力探测取代阻塞式启动检查
+        assert "capabilities=capabilities" in src
+        assert "StartupDialog" not in src

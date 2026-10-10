@@ -93,6 +93,7 @@ class SearchTab(QWidget):
         super().__init__(parent)
         self.setObjectName("SearchTab")
         self._default_top_k = default_top_k
+        self._unavailable_reason = ""
         self._init_ui()
         self._init_spinner()
         self._show_empty()
@@ -181,6 +182,23 @@ class SearchTab(QWidget):
 
     def _show_empty(self) -> None:
         self._stack.setCurrentWidget(self._empty)
+
+    def set_unavailable_reason(self, reason: str) -> None:
+        """标记检索不可用（受限模式）或恢复可用。
+
+        复用既有的 error 视图承载原因，避免用户点击后才看到报错。
+        """
+        self._unavailable_reason = reason
+        enabled = not reason
+        self._input.setEnabled(enabled)
+        self._search_btn.setEnabled(enabled)
+        self._top_k_spin.setEnabled(enabled)
+        if reason:
+            self._input.setPlaceholderText(reason)
+            self._show_error()
+        else:
+            self._input.setPlaceholderText("输入自然语言查询...")
+            self._show_empty()
 
     def _show_results(self) -> None:
         self._stack.setCurrentWidget(self._result_list)

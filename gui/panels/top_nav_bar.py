@@ -170,6 +170,23 @@ class TopNavBar(QWidget):
             if ws_id:
                 self.workspaceSwitchRequested.emit(ws_id)
 
+    def set_import_enabled(self, enabled: bool) -> None:
+        """启用/禁用导入入口。
+
+        受限模式下禁用并给出 tooltip 解释原因，避免用户点击后才报错。
+        """
+        self._import_btn.setEnabled(enabled)
+        if enabled:
+            self._import_btn.setToolTip("")
+        else:
+            self._import_btn.setToolTip(
+                "受限模式：未配置本地嵌入模型，导入需要生成向量向量。"
+                "请在设置 → 模型中配置后重试。"
+            )
+
+    def is_import_enabled(self) -> bool:
+        return self._import_btn.isEnabled()
+
     def set_workspaces(self, workspaces: list[tuple[str, str]], current_ws_id: str = ""):
         """填充工作区下拉。
 

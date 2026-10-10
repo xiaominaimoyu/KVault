@@ -88,9 +88,17 @@ class ReindexWorker(QThread):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, capabilities=None):
         super().__init__()
         self.config = config
+
+        # 运行时能力：未配置本地模型时进入受限模式，
+        # 笔记库等功能照常可用，仅禁用语义检索与文档导入。
+        if capabilities is None:
+            from core.capabilities import probe
+
+            capabilities = probe(config)
+        self.capabilities = capabilities
 
         self._apply_theme(getattr(config, "theme", "dark"))
 
@@ -328,6 +336,8 @@ class MainWindow(QMainWindow):
         self.status_bar = StatusBar(
             reduce_motion=getattr(self.config, "reduce_motion", False)
         )
+        # 无模型启动后，用户在设置里配好模型即可点击状态栏恢复能力
+        self.status_bar.set_retry_handler(self._on_retry_capabilities)
 
 
         container = QWidget()
@@ -453,14 +463,78 @@ class MainWindow(QMainWindow):
         self.status_bar.show_message("本地运行 · 就绪")
 
     def _check_environment(self):
-        if not self.embedder.is_available():
-            self.status_bar.show_message("Ollama 服务未启动，请检查设置")
-            logger.warning("Ollama 服务不可访问")
-        elif not self.embedder.is_model_available():
+        """根据运行时能力刷新状态提示。
+
+        受限模式下**不视为错误**——笔记库等功能不受影响，因此这里给出的是
+        「提示 + 重试入口」而非失败告警。
+        """
+        if self.capabilities.limited:
+            self._apply_degraded_mode()
+            return
+
+        if not self.embedder.is_model_available():
             self.status_bar.show_message(f"模型未就绪: {self.config.embedding_model}")
             logger.warning("模型不可用: %s", self.config.embedding_model)
         else:
             self.status_bar.show_message("本地运行 · 就绪")
+            self.status_bar.set_ollama_status(True)
+
+    def _apply_degraded_mode(self) -> None:
+        """进入受限模式：禁用依赖嵌入的功能，并提供配置指引。"""
+        caps = self.capabilities
+        logger.warning("受限模式：%s", caps.summary())
+        for reason in caps.reasons:
+            logger.warning("  - %s", reason)
+
+        # 后端名如实反映配置：选 llama.cpp 时显示「模型」，
+        # 否则显示「Ollama ✗」会让用户误以为需要启动 Ollama。
+        self.status_bar.set_backend_label(
+            "llama.cpp" if caps.backend_type == "llama_cpp" else "Ollama"
+        )
+
+        # 依赖嵌入模型的入口一律禁用，而不是让用户点了之后报错
+        self.top_nav_bar.set_import_enabled(False)
+        self.detail_panel.set_search_enabled(False)
+
+        self.status_bar.show_message(
+            "受限模式 · 笔记库可用，语义检索与导入已禁用（点击状态栏重试检测）", 0
+        )
+        self.status_bar.set_ollama_status(False)
+        self.status_bar.set_degraded(True)
+
+    def _on_retry_capabilities(self) -> None:
+        """状态栏点击触发的能力重检（重新探测 + 刷新 UI 状态）。"""
+        self.retry_capability_check()
+
+    def retry_capability_check(self) -> None:
+        """重新探测运行时能力，用户配置完模型后调用。"""
+        from core.capabilities import probe
+
+        self.capabilities = probe(self.config)
+        self._log_and_apply_capabilities()
+        from core.capabilities import probe
+
+        self.capabilities = probe(self.config)
+        self._log_and_apply_capabilities()
+
+    def _log_and_apply_capabilities(self) -> None:
+        caps = self.capabilities
+        if caps.limited:
+            self._apply_degraded_mode()
+        else:
+            self.top_nav_bar.set_import_enabled(True)
+            self.detail_panel.set_search_enabled(True)
+            self.status_bar.set_degraded(False)
+            self.status_bar.set_backend_label(
+                "llama.cpp" if caps.backend_type == "llama_cpp" else "Ollama"
+            )
+            self.status_bar.set_ollama_status(self.embedder.is_available())
+            self.status_bar.show_message("本地运行 · 就绪")
+            QMessageBox.information(self, "检测通过", caps.user_message())
+
+    def capabilities_user_message(self) -> str:
+        """面向用户的受限模式说明。"""
+        return self.capabilities.user_message()
 
     def _reload_all(self):
         self._reload_workspace_combo()

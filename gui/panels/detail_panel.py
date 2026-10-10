@@ -48,3 +48,17 @@ class DetailPanel(QTabWidget):
 
     def switch_to_metadata(self):
         self.setCurrentIndex(TAB_METADATA)
+
+    def set_search_enabled(self, enabled: bool) -> None:
+        """启用/禁用语义检索。
+
+        受限模式下禁用检索标签页并给出原因，而不是让用户点下去才报错。
+        """
+        self.setTabEnabled(TAB_SEARCH, enabled)
+        if enabled:
+            self.search_tab.set_unavailable_reason("")
+        else:
+            self.search_tab.set_unavailable_reason(
+                "受限模式：未配置本地嵌入模型，语义检索不可用。"
+                "请在设置 → 模型中配置后重试。"
+            )

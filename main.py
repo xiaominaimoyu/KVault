@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
+
+from core.capabilities import probe
 from core.config import Config
-from core.startup_check import StartupChecker
-from gui.dialogs.startup_dialog import StartupDialog
 from gui.main_window import MainWindow
 
 
@@ -22,31 +22,21 @@ def _setup_logging(logs_dir: Path):
     )
 
 
-def _run_startup_check(config: Config) -> bool:
-    """Run startup checks with retry loop. Requires QApplication to exist.
+def _log_capabilities(caps) -> None:
+    """把能力探测结果写入日志。"""
+    for result in caps.checks:
+        if result.passed:
+            logging.info("Startup check [%s]: %s", result.name, result.message)
+        else:
+            logging.warning("Startup check [%s]: %s", result.name, result.message)
 
-    Returns True if the app should continue (checks passed or user skipped).
-    """
-    checker = StartupChecker(config)
-    while True:
-        results = checker.check_all()
-        for r in results:
-            if r.passed:
-                logging.info("Startup check [%s]: %s", r.name, r.message)
-            else:
-                logging.warning("Startup check [%s]: %s", r.name, r.message)
-
-        if not checker.has_errors(results):
-            return True
-
-        dialog = StartupDialog(results)
-        if dialog.exec() == StartupDialog.Accepted:
-            # Retry: re-run checks
-            logging.info("User requested startup check retry")
-            continue
-        # Skip and continue
-        logging.info("User skipped startup check")
-        return True
+    if caps.limited:
+        # 受限不是致命错误——笔记库等核心功能不依赖模型
+        logging.warning("Running in LIMITED MODE: %s", caps.summary())
+        for reason in caps.reasons:
+            logging.warning("  - %s", reason)
+    else:
+        logging.info("Capabilities: %s", caps.summary())
 
 
 def main():
@@ -64,11 +54,13 @@ def main():
     # QApplication must be created before any QDialog
     app = QApplication(sys.argv)
 
-    if not _run_startup_check(config):
-        logging.info("Startup aborted")
-        return
+    # 探测运行时能力。**失败不阻断启动**——KVault 的笔记库、图谱、反链、
+    # 标签与 MCP 笔记读写都不依赖本地模型；只有语义检索与文档导入需要。
+    # 未配置模型时进入受限模式，由 UI 提示用户后续配置。
+    capabilities = probe(config)
+    _log_capabilities(capabilities)
 
-    window = MainWindow(config)
+    window = MainWindow(config, capabilities=capabilities)
     window.show()
     sys.exit(app.exec())
 

@@ -33,6 +33,8 @@ class StatusBar(QWidget):
         self.setFixedHeight(32)
         self.setObjectName("StatusBar")
         self._reduce_motion = reduce_motion
+        self._degraded = False
+        self._retry_handler = None
         self._init_ui()
 
     def _init_ui(self):
@@ -87,6 +89,43 @@ class StatusBar(QWidget):
         else:
             self._ollama_dot.set_status("error")
             self._ollama_label.setText("Ollama ✗")
+
+    def set_backend_label(self, text: str) -> None:
+        """把后端指示改写为实际使用的后端名（Ollama / llama.cpp）。
+
+        使用 llama.cpp 时显示「模型」而非「Ollama」，否则会误导用户以为
+        需要额外启动 Ollama 服务。
+        """
+        self._ollama_label.setText(text)
+
+    def set_degraded(self, degraded: bool) -> None:
+        """标记受限模式：状态点转为警告色。
+
+        受限不等于故障——笔记库仍完全可用，因此用 warning 而非 error。
+        """
+        self._degraded = degraded
+        if degraded:
+            self._status_dot.set_status("warning")
+
+    def is_degraded(self) -> bool:
+        return self._degraded
+
+    def set_retry_handler(self, handler) -> None:
+        """注册「重试检测」回调，点击状态消息区域时触发。
+
+        这是无模型启动后，用户配置完模型如何无缝恢复的关键入口。
+        """
+        self._retry_handler = handler
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 — Qt 接口命名
+        """点击状态消息区触发重试检测。"""
+        from PySide6.QtCore import Qt
+
+        if event.button() == Qt.LeftButton and self._retry_handler is not None:
+            self._retry_handler()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def show_message(self, text: str, timeout: int = 0):
         """兼容 QStatusBar.showMessage 的便捷方法。"""
