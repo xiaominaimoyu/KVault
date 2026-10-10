@@ -59,3 +59,43 @@ def test_validate_chunk_params():
 
     cfg = Config(chunk_size=200, chunk_overlap=50, top_k=10, similarity_threshold=0.3)
     assert cfg.validate() == []
+
+
+# --------------------------------------------------- 损坏配置不得阻止启动
+
+
+def test_load_config_with_utf8_bom(tmp_path: Path):
+    """带 BOM 的配置必须能正常读取。
+
+    回归防护：Windows 记事本、PowerShell ``Out-File -Encoding utf8`` 以及
+    不少编辑器都会写入 UTF-8 BOM。此前用 ``read_text("utf-8")`` 读取会抛
+    ``JSONDecodeError: Unexpected UTF-8 BOM``，导致程序启动即崩溃。
+    """
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"chunk_size": 777}', encoding="utf-8-sig")
+    assert Config.load(str(cfg_path)).chunk_size == 777
+
+
+def test_load_config_with_malformed_json_falls_back(tmp_path: Path):
+    """非法 JSON 必须降级为默认配置，而不是抛异常。"""
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"chunk_size": ', encoding="utf-8")
+    assert Config.load(str(cfg_path)).chunk_size == Config().chunk_size
+
+
+def test_load_config_with_non_object_toplevel(tmp_path: Path):
+    """顶层不是对象（数组/标量）时必须降级。"""
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text("[1, 2, 3]", encoding="utf-8")
+    assert Config.load(str(cfg_path)).chunk_size == Config().chunk_size
+
+
+def test_load_config_with_blank_content(tmp_path: Path):
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text("   \n  ", encoding="utf-8")
+    assert Config.load(str(cfg_path)).chunk_size == Config().chunk_size
+
+
+def test_load_config_missing_file_returns_defaults(tmp_path: Path):
+    cfg = Config.load(str(tmp_path / "nope.json"))
+    assert cfg.chunk_size == Config().chunk_size

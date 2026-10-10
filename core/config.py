@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import sys
 import time
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -181,7 +184,7 @@ class Config:
     @classmethod
     def load(cls, path: str = "config.json") -> "Config":
         config_path = _resolve_config_path(path)
-        data = json.loads(config_path.read_text("utf-8")) if config_path.exists() else {}
+        data = _read_config_json(config_path)
         base_dir = _data_base_dir()
 
         # Resolve relative path fields against the chosen data base directory
@@ -222,6 +225,49 @@ class Config:
         config_path.write_text(
             json.dumps(self.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
         )
+
+
+def _read_config_json(config_path: Path) -> dict:
+    """读取配置文件，任何损坏都不得阻止程序启动。
+
+    实际遇到过的两类真实故障：
+    - **BOM**：Windows 记事本、PowerShell ``Out-File -Encoding utf8`` 与部分
+      编辑器都会写入 UTF-8 BOM。用 ``utf-8`` 读取会抛
+      ``JSONDecodeError: Unexpected UTF-8 BOM``，直接让应用在启动时崩溃。
+    - **内容损坏**：手工编辑中途保存，或磁盘写入被中断，得到非法 JSON。
+
+    两种情况都退回到默认配置并记录警告——配置坏了应该降级，
+    而不是让用户连程序都打不开。
+    """
+    if not config_path.exists():
+        return {}
+
+    try:
+        # utf-8-sig 对有无 BOM 的文件都能正确解析
+        raw = config_path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        logger.warning("无法读取配置文件 %s: %s，使用默认配置", config_path, exc)
+        return {}
+
+    if not raw.strip():
+        return {}
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "配置文件 %s 不是合法 JSON (%s)，已忽略并使用默认配置。"
+            "如需自定义可删除该文件后通过设置界面重新配置。",
+            config_path,
+            exc,
+        )
+        return {}
+
+    if not isinstance(data, dict):
+        logger.warning("配置文件 %s 顶层应为对象，使用默认配置", config_path)
+        return {}
+
+    return data
 
 
 def _resolve_config_path(path: str) -> Path:
