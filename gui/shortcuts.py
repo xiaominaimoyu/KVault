@@ -12,17 +12,25 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QWidget
 
 # action_id -> 快捷键序列（设计文档 5.6）
+#
+# 冲突规避：``Ctrl+S`` 在编辑器内是「保存当前笔记」（由编辑器自身拦截），
+# 因此这里的全局「设置」改用 ``Ctrl+,``，符合主流编辑器习惯。
 DEFAULT_SHORTCUTS: dict[str, str] = {
     "import_docs": "Ctrl+I",
     "focus_global_search": "Ctrl+F",
     "focus_semantic_search": "Ctrl+K",
-    "open_settings": "Ctrl+S",
+    "open_settings": "Ctrl+,",
     "refresh_status": "Ctrl+R",
     "delete_selected": "Delete",
     "clear_selection": "Esc",
     "tab_preview": "Ctrl+1",
     "tab_search": "Ctrl+2",
     "tab_metadata": "Ctrl+3",
+    # 笔记库
+    "view_notes": "Ctrl+Shift+N",
+    "view_graph": "Ctrl+G",
+    "quick_switch": "Ctrl+O",
+    "command_palette": "Ctrl+P",
 }
 
 

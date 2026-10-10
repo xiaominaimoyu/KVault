@@ -81,8 +81,10 @@ class HybridRetriever:
             )
 
         chunk_map: dict[str, SearchResult] = {}
+        vector_sourced: set[str] = set()
         for r in vector_results:
             chunk_map[r.chunk_id] = r
+            vector_sourced.add(r.chunk_id)
         for h in bm25_hits:
             if h.chunk_id not in chunk_map:
                 chunk_map[h.chunk_id] = SearchResult(
@@ -100,7 +102,14 @@ class HybridRetriever:
             base = chunk_map.get(fr.chunk_id)
             if base is None:
                 continue
-            if base.score < self.config.similarity_threshold:
+            # 阈值只作用在**向量臂**的结果上。
+            #
+            # 1) 阈值衡量的是语义相似度（0~1），而 RRF 融合分量级是 1/(k+rank)，
+            #    k=60 时单条约 0.016。若对融合分套用 similarity_threshold（默认 0.5），
+            #    混合检索的结果会被全部丢弃——开启后反而检索不到东西。
+            # 2) BM25 分数是无上界的关键词相关度，与余弦相似度不在同一量纲，
+            #    直接比较同样不成立。BM25 独占的结果说明关键词确实命中，不受此阈值约束。
+            if fr.chunk_id in vector_sourced and base.score < self.config.similarity_threshold:
                 continue
             results.append(SearchResult(
                 chunk_id=base.chunk_id,

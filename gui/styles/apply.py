@@ -30,6 +30,20 @@ def _load_qss(theme: str) -> str:
     return content
 
 
+def _load_notes_qss(theme: str) -> str:
+    """读取笔记库专属样式。文件缺失不影响主样式，属于可选项。"""
+    path = _STYLES_DIR / f"notes_{theme}.qss"
+    if not path.exists():
+        logger.debug("笔记样式文件不存在，跳过: %s", path)
+        return ""
+    key = f"notes_{theme}"
+    if key in _QSS_CACHE:
+        return _QSS_CACHE[key]
+    content = path.read_text(encoding="utf-8")
+    _QSS_CACHE[key] = content
+    return content
+
+
 def interpolate(qss_template: str, tokens: dict[str, str]) -> str:
     """将 QSS 模板中的占位符替换为 Token 值。
 
@@ -88,6 +102,10 @@ def apply_theme(app: QGuiApplication, theme: str = "dark") -> str:
     try:
         qss_template = _load_qss(qss_theme)
         qss = interpolate(qss_template, tokens)
+        # 笔记库样式追加在主样式之后，同名选择器以笔记库规则为准
+        notes_qss = interpolate(_load_notes_qss(theme), tokens)
+        if notes_qss:
+            qss = f"{qss}\n\n{notes_qss}"
         app.setStyleSheet(qss)
         logger.info("theme applied: %s", theme)
         return theme
@@ -96,6 +114,9 @@ def apply_theme(app: QGuiApplication, theme: str = "dark") -> str:
         try:
             qss_template = _load_qss("dark")
             qss = interpolate(qss_template, TOKENS_DARK)
+            notes_qss = interpolate(_load_notes_qss("dark"), TOKENS_DARK)
+            if notes_qss:
+                qss = f"{qss}\n\n{notes_qss}"
             app.setStyleSheet(qss)
             return "dark"
         except Exception:
@@ -107,6 +128,9 @@ def apply_theme(app: QGuiApplication, theme: str = "dark") -> str:
         try:
             qss_template = _load_qss("dark")
             qss = interpolate(qss_template, TOKENS_DARK)
+            notes_qss = interpolate(_load_notes_qss("dark"), TOKENS_DARK)
+            if notes_qss:
+                qss = f"{qss}\n\n{notes_qss}"
             app.setStyleSheet(qss)
             return "dark"
         except Exception:

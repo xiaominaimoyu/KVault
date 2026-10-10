@@ -16,7 +16,8 @@ def test_default_shortcuts_cover_design_doc():
         "import_docs": "Ctrl+I",
         "focus_global_search": "Ctrl+F",
         "focus_semantic_search": "Ctrl+K",
-        "open_settings": "Ctrl+S",
+        # Ctrl+S 已让给编辑器的「保存笔记」，设置改用 Ctrl+,
+        "open_settings": "Ctrl+,",
         "refresh_status": "Ctrl+R",
         "delete_selected": "Delete",
         "clear_selection": "Esc",
@@ -26,6 +27,19 @@ def test_default_shortcuts_cover_design_doc():
     }
     for action_id, key in expected.items():
         assert DEFAULT_SHORTCUTS[action_id] == key, f"{action_id} 应为 {key}"
+
+
+def test_no_duplicate_key_bindings():
+    """同一按键序列不能绑定到两个动作，否则触发顺序不确定。"""
+    seen: dict[str, str] = {}
+    for action_id, key in DEFAULT_SHORTCUTS.items():
+        assert key not in seen, f"{action_id} 与 {seen.get(key)} 争用 {key}"
+        seen[key] = action_id
+
+
+def test_note_shortcuts_present():
+    for action_id in ("view_notes", "view_graph", "quick_switch", "command_palette"):
+        assert action_id in DEFAULT_SHORTCUTS
 
 
 def test_manager_registers_all_shortcuts():

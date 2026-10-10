@@ -72,8 +72,11 @@ class IncrementalUpdater:
         seen_paths: set[str] = set()
 
         if files_dir.exists():
-            for p in files_dir.iterdir():
-                if p.is_dir():
+            # 必须递归遍历：导入时保留了源文件的目录层级
+            # （files_dir/<来源目录>/<文件名>），非递归扫描会把它们全部误判为新增，
+            # 同时把原有记录误判为已删除。
+            for p in sorted(files_dir.rglob("*")):
+                if not p.is_file():
                     continue
                 stored = str(p)
                 seen_paths.add(stored)

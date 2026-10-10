@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
@@ -31,11 +32,14 @@ from core.document_parser import DocumentParser
 from core.embedding_service import EmbeddingService
 from core.ingest import ingest_document
 from core.metadata_manager import DEFAULT_PARTITION_ID, MetadataManager
+from core.note_store import NoteStore
 from core.retriever import Retriever
 from core.text_splitter import KnowledgeTextSplitter
 from core.vector_store import VectorStore
 from core.workspace import WorkspaceManager
 from gui.dialogs.settings_dialog import SettingsDialog
+from gui.editor.graph_view import GraphView
+from gui.panels.note_workspace import NoteWorkspace
 from gui.panels.detail_panel import DetailPanel
 from gui.panels.doc_list_panel import (
     STATUS_LABELS,
@@ -168,6 +172,9 @@ class MainWindow(QMainWindow):
         self._all_documents: list = []
         self._current_filter: str = ""
 
+        self.note_store: NoteStore | None = None
+        self._current_view: str = "docs"
+
         self.retriever = Retriever(
             embedder=self.embedder,
             vector_store=self.vector_store,
@@ -190,8 +197,74 @@ class MainWindow(QMainWindow):
         self._reload_all()
         self._check_environment()
 
+    # ---------------------------------------------------------------- 视图切换
+
+    VIEWS = ("docs", "notes", "graph")
+
+    def _switch_view(self, view: str) -> None:
+        """在「文档 / 笔记 / 图谱」三种视图之间切换。"""
+        if view not in self.VIEWS:
+            return
+
+        self._current_view = view
+        self.main_stack.setCurrentIndex(self.VIEWS.index(view))
+
+        for name, button in (
+            ("docs", self.docs_view_button),
+            ("notes", self.notes_view_button),
+            ("graph", self.graph_view_button),
+        ):
+            button.setProperty("btnType", "primary" if name == view else "secondary")
+            # 动态属性变化后必须重新 polish 才会应用新样式
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        # 「文档」视图专属部件只在需要时可见
+        show_docs = view == "docs"
+        self.nav_panel.setVisible(show_docs)
+        self.view_switch.setVisible(True)
+
+        if view == "notes":
+            self.note_workspace.refresh()
+            if self.note_workspace.editor.is_dirty():
+                self.note_workspace.save_current()
+        elif view == "graph":
+            self._refresh_graph()
+
+    def _refresh_graph(self) -> None:
+        """重建图谱视图。"""
+        if self.note_store is None:
+            return
+        self.note_workspace.show_graph(self.graph_view)
+        stats = self.note_store.stats()
+        self.graph_status.setText(
+            f"{stats['notes']} 篇笔记 · {stats['links']} 条链接 · "
+            f"{stats['broken_links']} 条断链 · 图中显示 {self.graph_view.node_count()} 个节点"
+        )
+
+    def _open_graph_node(self, path: str) -> None:
+        """点击图谱节点时打开对应笔记。"""
+        if self.note_workspace.open_note(path):
+            self._switch_view("notes")
+
+    def _on_note_saved(self) -> None:
+        """笔记保存后刷新状态栏。"""
+        self.status_bar.show_message("笔记已保存")
+
+    def _on_note_stats(self, stats: dict) -> None:
+        """笔记统计变化时更新状态栏。"""
+        self.status_bar.set_stats_summary(
+            f"笔记 {stats['notes']} · 链接 {stats['links']} · 标签 {stats['tags']}"
+        )
+
+    def _resolve_theme(self) -> str:
+        """把配置里的主题名解析为具体主题（system -> dark/light）。"""
+        from gui.styles.apply import resolve_system_theme
+
+        theme = getattr(self.config, "theme", "dark")
+        return resolve_system_theme() if theme == "system" else theme
+
     def _apply_theme(self, theme: str) -> str:
-        """应用主题到 QApplication（dark / light / system）。"""
         from PySide6.QtWidgets import QApplication
 
         from gui.styles.apply import apply_theme
@@ -199,7 +272,13 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is None:
             return "dark"
-        return apply_theme(app, theme)
+        resolved = apply_theme(app, theme)
+        # 笔记视图自带一套高亮配色，需跟随主题一起切换
+        if getattr(self, "note_workspace", None) is not None:
+            self.note_workspace.set_theme(resolved)
+        if getattr(self, "graph_view", None) is not None:
+            self.graph_view.set_theme(resolved)
+        return resolved
 
     def _setup_shortcuts(self):
         """注册全局键盘快捷键（设计规范 5.6）。"""
@@ -216,8 +295,64 @@ class MainWindow(QMainWindow):
             "tab_preview": self.detail_panel.switch_to_preview,
             "tab_search": self.detail_panel.switch_to_search,
             "tab_metadata": self.detail_panel.switch_to_metadata,
+            "view_notes": lambda: self._switch_view("notes"),
+            "view_graph": lambda: self._switch_view("graph"),
+            "quick_switch": self._open_quick_switcher,
+            "command_palette": self._open_command_palette,
         }
         self._shortcut_manager = ShortcutManager(self, handlers)
+
+    def _open_quick_switcher(self):
+        """Ctrl+O：快速打开笔记。"""
+        if self.note_store is None:
+            return
+        from gui.editor.quick_switcher import NoteCandidate, show_quick_switcher
+
+        candidates = [
+            NoteCandidate(record.path, record.title or record.name)
+            for record in self.note_store.list_notes()
+        ]
+        dialog = show_quick_switcher(self, candidates)
+        dialog.noteChosen.connect(self._open_note_from_switcher)
+
+    def _open_note_from_switcher(self, path: str):
+        """从快速切换器打开笔记，并切到笔记视图。"""
+        if self.note_workspace.open_note(path):
+            self._switch_view("notes")
+
+    def _open_command_palette(self):
+        """命令面板：列出常用操作。"""
+        from gui.editor.quick_switcher import Command, show_command_palette
+
+        commands = [
+            Command("新建笔记", lambda: self._switch_view("notes"), "Ctrl+N"),
+            Command("打开图谱", lambda: self._switch_view("graph"), "Ctrl+G"),
+            Command("切换到文档", lambda: self._switch_view("docs")),
+            Command("快速打开笔记", self._open_quick_switcher, "Ctrl+O"),
+            Command("语义检索", self._focus_semantic_search, "Ctrl+K"),
+            Command("刷新笔记索引", self._sync_notes, "Ctrl+R"),
+            Command("设置", self._open_settings, "Ctrl+S"),
+        ]
+        dialog = show_command_palette(self, commands)
+        dialog.commandChosen.connect(self._run_command)
+
+    def _run_command(self, command):
+        """执行命令面板选中的命令。"""
+        if callable(command.action):
+            command.action()
+
+    def _sync_notes(self):
+        """从磁盘全量同步笔记索引（含外部编辑器的改动）。"""
+        if self.note_store is None:
+            return
+        report = self.note_store.sync_all()
+        self.note_workspace.refresh()
+        summary = report.as_dict()
+        self.status_bar.show_message(
+            f"笔记同步完成：新增 {summary['added']}、更新 {summary['updated']}、"
+            f"移除 {summary['removed']}",
+            4000,
+        )
 
     def _focus_semantic_search(self):
         """Ctrl+K：切到检索标签页并聚焦检索输入框。"""
@@ -244,6 +379,33 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(0)
         main_layout.addWidget(self.top_nav_bar)
 
+        # 视图切换栏：「文档」做语义检索，「笔记」做写作与链接
+        self.view_switch = QWidget()
+        self.view_switch.setObjectName("ViewSwitchBar")
+        switch_layout = QHBoxLayout(self.view_switch)
+        switch_layout.setContentsMargins(12, 6, 12, 6)
+        switch_layout.setSpacing(6)
+
+        self.docs_view_button = QPushButton("文档", self.view_switch)
+        self.docs_view_button.setObjectName("ViewSwitchButton")
+        self.docs_view_button.setProperty("btnType", "primary")
+        self.notes_view_button = QPushButton("笔记", self.view_switch)
+        self.notes_view_button.setObjectName("ViewSwitchButton")
+        self.graph_view_button = QPushButton("图谱", self.view_switch)
+        self.graph_view_button.setObjectName("ViewSwitchButton")
+        self.graph_view_button.setToolTip("查看笔记之间的链接网络")
+
+        self.docs_view_button.clicked.connect(lambda: self._switch_view("docs"))
+        self.notes_view_button.clicked.connect(lambda: self._switch_view("notes"))
+        self.graph_view_button.clicked.connect(lambda: self._switch_view("graph"))
+
+        switch_layout.addWidget(self.docs_view_button)
+        switch_layout.addWidget(self.notes_view_button)
+        switch_layout.addWidget(self.graph_view_button)
+        switch_layout.addStretch(1)
+
+        main_layout.addWidget(self.view_switch)
+
         splitter = QSplitter(Qt.Horizontal)
 
         self.nav_panel = self._build_nav_panel()
@@ -263,12 +425,56 @@ class MainWindow(QMainWindow):
         self.detail_panel.searchRequested.connect(self._on_search)
         self.detail_panel.resultClicked.connect(self._on_result_clicked)
 
+        # 「文档」视图：导航 + 文档列表 + 详情
         splitter.addWidget(self.nav_panel)
         splitter.addWidget(self.doc_list_panel)
         splitter.addWidget(self.detail_panel)
         splitter.setSizes([220, 500, 680])
 
-        main_layout.addWidget(splitter, 1)
+        self.docs_stack = QWidget()
+        docs_layout = QHBoxLayout(self.docs_stack)
+        docs_layout.setContentsMargins(0, 0, 0, 0)
+        docs_layout.setSpacing(0)
+        docs_layout.addWidget(self.nav_panel)
+        docs_layout.addWidget(splitter)
+
+        # 「笔记」视图
+        current_ws = self._workspace_manager.get_current()
+        self.note_store = NoteStore(
+            str(current_ws.sqlite_path), current_ws.base_dir / "vault", self.metadata
+        )
+        self.note_workspace = NoteWorkspace(self.note_store)
+        self.note_workspace.noteSaved.connect(lambda _p: self._on_note_saved())
+        self.note_workspace.statsChanged.connect(self._on_note_stats)
+        self.note_workspace.set_theme(self._resolve_theme())
+
+        # 「图谱」视图
+        self.graph_view = GraphView()
+        self.graph_view.set_theme(self._resolve_theme())
+        self.graph_view.nodeSelected.connect(self._open_graph_node)
+
+        self.graph_stack = QWidget()
+        graph_layout = QVBoxLayout(self.graph_stack)
+        graph_layout.setContentsMargins(0, 0, 0, 0)
+        graph_toolbar = QWidget(self.graph_stack)
+        graph_toolbar.setObjectName("GraphToolbar")
+        graph_toolbar_layout = QHBoxLayout(graph_toolbar)
+        graph_toolbar_layout.setContentsMargins(12, 6, 12, 6)
+        self.graph_status = QLabel("", graph_toolbar)
+        self.graph_status.setObjectName("GraphStatus")
+        self.graph_refresh_button = QPushButton("刷新", graph_toolbar)
+        self.graph_refresh_button.clicked.connect(self._refresh_graph)
+        graph_toolbar_layout.addWidget(self.graph_status, 1)
+        graph_toolbar_layout.addWidget(self.graph_refresh_button)
+        graph_layout.addWidget(graph_toolbar)
+        graph_layout.addWidget(self.graph_view, 1)
+
+        self.main_stack = QStackedWidget()
+        self.main_stack.addWidget(self.docs_stack)
+        self.main_stack.addWidget(self.note_workspace)
+        self.main_stack.addWidget(self.graph_stack)
+
+        main_layout.addWidget(self.main_stack, 1)
         main_layout.addWidget(self.status_bar)
         self.setCentralWidget(container)
 
@@ -848,6 +1054,8 @@ class MainWindow(QMainWindow):
     def _switch_workspace(self, ws_id: str):
         if not ws_id or ws_id == self._workspace_manager.config.workspaces.current:
             return
+        # 切换前先落盘，否则未保存的编辑内容会随工作区重建而丢失
+        self.note_workspace.save_current()
         try:
             self._workspace_manager.switch(ws_id)
             self._rebuild_services_for_workspace()
@@ -901,8 +1109,27 @@ class MainWindow(QMainWindow):
             metadata=self.metadata,
             config=self.config,
         )
+        self._rebuild_note_workspace(ws)
+
+    def _rebuild_note_workspace(self, workspace) -> None:
+        """为新的工作区重建笔记库（每个工作区拥有独立的 vault 目录）。"""
+        self.note_store = NoteStore(
+            str(workspace.sqlite_path), workspace.base_dir / "vault", self.metadata
+        )
+
+        # 就地替换内容，避免重建整个 NoteWorkspace 丢失当前编辑状态与滚动位置
+        self.note_workspace.store = self.note_store
+        self.note_workspace.refresh()
+        self.note_workspace.editor.set_text("", None)
+        self.note_workspace.viewer.clear_view()
 
     def closeEvent(self, event):
+        # 关闭前保存未落盘的笔记编辑
+        try:
+            self.note_workspace.save_current()
+        except Exception:  # noqa: BLE001 —— 关闭阶段不应因保存失败而卡住退出
+            logger.warning("关闭前保存笔记失败", exc_info=True)
+
         if self._ingest_worker and self._ingest_worker.isRunning():
             self._ingest_worker.quit()
             self._ingest_worker.wait(3000)

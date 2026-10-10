@@ -1,0 +1,199 @@
+/* === 视图切换栏 === */
+#ViewSwitchBar {
+    background-color: %(bg-surface)s;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+#ViewSwitchButton {
+    padding: 5px 16px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: %(fg-secondary)s;
+    background-color: transparent;
+}
+#ViewSwitchButton:hover {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+}
+#ViewSwitchButton[btnType="primary"] {
+    background-color: %(accent-primary)s;
+    color: %(bg-vault)s;
+    font-weight: 600;
+}
+#ViewSwitchButton[btnType="primary"]:hover {
+    background-color: %(accent-primary-hover)s;
+}
+
+/* === 笔记列表面板 === */
+#NoteListColumn {
+    background-color: %(bg-surface)s;
+    border-right: 1px solid %(fg-faint)s;
+}
+#NoteListSearch, #NoteListTagFilter {
+    padding: 5px 8px;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+}
+#NoteListSearch:focus, #NoteListTagFilter:focus {
+    border-color: %(accent-primary)s;
+}
+#NoteListCount {
+    color: %(fg-muted)s;
+    font-size: 11px;
+    padding: 2px 2px;
+}
+#NoteTree {
+    background-color: transparent;
+    border: none;
+    outline: none;
+}
+#NoteTree::item {
+    padding: 4px 6px;
+    border-radius: 5px;
+    color: %(fg-primary)s;
+}
+#NoteTree::item:hover {
+    background-color: %(bg-raised)s;
+}
+#NoteTree::item:selected {
+    background-color: %(accent-primary-dim)s;
+    color: %(fg-primary)s;
+}
+#NoteTree::branch {
+    background-color: transparent;
+}
+
+/* === 笔记详情区 === */
+#NoteDetailColumn {
+    background-color: %(bg-vault)s;
+}
+#NoteHeader {
+    background-color: %(bg-surface)s;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+#NoteTitle {
+    color: %(fg-primary)s;
+    font-size: 16px;
+    font-weight: 600;
+}
+#NoteModeSelect {
+    padding: 4px 8px;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+}
+#NoteSideTabs {
+    background-color: %(bg-surface)s;
+    border-top: 1px solid %(fg-faint)s;
+}
+
+/* === Markdown 编辑器 === */
+#MarkdownEditorText {
+    background-color: %(bg-vault)s;
+    color: %(fg-primary)s;
+    border: none;
+    selection-background-color: %(accent-primary-dim)s;
+    selection-color: %(fg-primary)s;
+}
+
+/* === 阅读视图 === */
+#NoteViewer {
+    background-color: %(bg-vault)s;
+    border: none;
+}
+
+/* === 链接面板 === */
+#LinkPanelHeader {
+    color: %(fg-secondary)s;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 6px;
+}
+#LinkPanelEmpty {
+    color: %(fg-muted)s;
+    font-size: 12px;
+    padding: 8px;
+}
+#LinkPanelList {
+    background-color: transparent;
+    border: none;
+    outline: none;
+}
+#LinkPanelList::item {
+    padding: 5px 8px;
+    border-radius: 5px;
+    color: %(fg-primary)s;
+}
+#LinkPanelList::item:hover {
+    background-color: %(bg-raised)s;
+}
+#LinkPanelList::item:selected {
+    background-color: %(accent-primary-dim)s;
+}
+
+/* === 图谱视图 === */
+#GraphView {
+    background-color: %(bg-vault)s;
+    border: none;
+}
+#GraphToolbar {
+    background-color: %(bg-surface)s;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+#GraphStatus {
+    color: %(fg-muted)s;
+    font-size: 12px;
+    padding-left: 4px;
+}
+
+/* === 快速切换器 / 命令面板 === */
+#QuickSwitcher, #CommandPalette {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+}
+#QuickSwitcherSearch, #CommandPaletteSearch {
+    padding: 8px 12px;
+    font-size: 15px;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+    background-color: %(bg-inset)s;
+    color: %(fg-primary)s;
+}
+#QuickSwitcherSearch:focus, #CommandPaletteSearch:focus {
+    border-color: %(accent-primary)s;
+}
+#QuickSwitcherList, #CommandPaletteList {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+    color: %(fg-primary)s;
+}
+#QuickSwitcherList::item, #CommandPaletteList::item {
+    padding: 7px 10px;
+    border-radius: 5px;
+}
+#QuickSwitcherList::item:selected, #CommandPaletteList::item:selected {
+    background-color: %(accent-primary-dim)s;
+    color: %(fg-primary)s;
+}
+#QuickSwitcherStatus, #CommandPaletteEmpty {
+    color: %(fg-muted)s;
+    font-size: 12px;
+}
+
+/* === 补全弹窗 === */
+#WikiLinkCompleterPopup {
+    background-color: %(bg-raised)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+    color: %(fg-primary)s;
+}
+#WikiLinkCompleterPopup::item {
+    padding: 6px 10px;
+    border-radius: 5px;
+}
+#WikiLinkCompleterPopup::item:selected {
+    background-color: %(accent-primary-dim)s;
+}
