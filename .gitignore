@@ -176,3 +176,6 @@ Thumbs.db
 
 # Uploads
 .uploads/
+
+# Local Workbuddy session artifacts
+.workbuddy/
