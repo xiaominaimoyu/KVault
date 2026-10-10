@@ -44,6 +44,33 @@ def _load_notes_qss(theme: str) -> str:
     return content
 
 
+def _load_extra_qss(theme: str) -> str:
+    """读取 Vault Standard 补充样式（设计文档中尚未覆盖的条款）。
+
+    与笔记样式一样属于可选项：文件缺失时静默跳过，不影响主样式。
+    """
+    path = _STYLES_DIR / f"vault_extra{'' if theme == 'dark' else '_' + theme}.qss"
+    if not path.exists():
+        logger.debug("补充样式文件不存在，跳过: %s", path)
+        return ""
+    key = f"vault_extra_{theme}"
+    if key in _QSS_CACHE:
+        return _QSS_CACHE[key]
+    content = path.read_text(encoding="utf-8")
+    _QSS_CACHE[key] = content
+    return content
+
+
+def _compose(qss_theme: str, tokens: dict) -> str:
+    """按 主样式 → 笔记样式 → 补充样式 的顺序拼接，保证后者覆盖前者。"""
+    parts = [interpolate(_load_qss(qss_theme), tokens)]
+    for loader in (_load_notes_qss, _load_extra_qss):
+        extra = interpolate(loader(qss_theme), tokens)
+        if extra:
+            parts.append(extra)
+    return "\n\n".join(parts)
+
+
 def interpolate(qss_template: str, tokens: dict[str, str]) -> str:
     """将 QSS 模板中的占位符替换为 Token 值。
 
@@ -97,42 +124,20 @@ def apply_theme(app: QGuiApplication, theme: str = "dark") -> str:
         theme = "dark"
 
     tokens = TOKENS_DARK if theme == "dark" else TOKENS_LIGHT
-    qss_theme = theme
 
     try:
-        qss_template = _load_qss(qss_theme)
-        qss = interpolate(qss_template, tokens)
-        # 笔记库样式追加在主样式之后，同名选择器以笔记库规则为准
-        notes_qss = interpolate(_load_notes_qss(theme), tokens)
-        if notes_qss:
-            qss = f"{qss}\n\n{notes_qss}"
-        app.setStyleSheet(qss)
+        app.setStyleSheet(_compose(theme, tokens))
         logger.info("theme applied: %s", theme)
         return theme
     except FileNotFoundError:
         logger.warning("QSS file for theme '%s' not found, falling back to dark", theme)
-        try:
-            qss_template = _load_qss("dark")
-            qss = interpolate(qss_template, TOKENS_DARK)
-            notes_qss = interpolate(_load_notes_qss("dark"), TOKENS_DARK)
-            if notes_qss:
-                qss = f"{qss}\n\n{notes_qss}"
-            app.setStyleSheet(qss)
-            return "dark"
-        except Exception:
-            logger.error("even dark theme QSS failed, applying empty stylesheet")
-            app.setStyleSheet("")
-            return "dark"
     except Exception as e:
         logger.warning("theme application failed: %s, falling back to dark", e)
-        try:
-            qss_template = _load_qss("dark")
-            qss = interpolate(qss_template, TOKENS_DARK)
-            notes_qss = interpolate(_load_notes_qss("dark"), TOKENS_DARK)
-            if notes_qss:
-                qss = f"{qss}\n\n{notes_qss}"
-            app.setStyleSheet(qss)
-            return "dark"
-        except Exception:
-            app.setStyleSheet("")
-            return "dark"
+
+    try:
+        app.setStyleSheet(_compose("dark", TOKENS_DARK))
+        return "dark"
+    except Exception:
+        logger.error("even dark theme QSS failed, applying empty stylesheet")
+        app.setStyleSheet("")
+        return "dark"

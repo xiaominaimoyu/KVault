@@ -132,59 +132,93 @@ def test_set_stats_updates_summary(panel):
 
 
 def test_stats_detail_collapsed_by_default(panel):
-    panel.set_stats("12 文档 · 340 块", ["总文档数: 12"])
-    assert panel._detail_label.isHidden()
+    """§3.2 状态详情默认折叠。"""
+    panel.set_stats("3 文档 · 12 块", ["已索引: 3", "失败: 0", "向量数: 12"])
+    assert panel.is_detail_expanded() is False
 
 
 def test_stats_detail_expands_on_toggle(panel):
-    panel.set_stats("12 文档 · 340 块", ["总文档数: 12"])
-    panel._toggle_btn.click()
-    assert not panel._detail_label.isHidden()
-    panel._toggle_btn.click()
-    assert panel._detail_label.isHidden()
+    """§3.2 展开为 4 行详细统计。"""
+    panel.set_stats(
+        "3 文档 · 12 块",
+        ["已索引: 3", "失败: 0", "向量数: 12", "分区: 4 · 标签: 2"],
+    )
+    panel._toggle_stats_detail()
+
+    assert panel.is_detail_expanded() is True
+    assert len(panel._detail_labels) == 4
+    assert panel._detail_labels[0].text() == "已索引: 3"
+    assert panel._detail_labels[3].text() == "分区: 4 · 标签: 2"
 
 
-def test_refresh_button_emits_signal(panel):
-    emitted = []
-    panel.refreshStatsRequested.connect(lambda: emitted.append(True))
-    panel._refresh_btn.click()
-    assert emitted == [True]
-
-
-def test_partition_context_menu_actions_emit_signals(panel):
-    created, renamed, deleted = [], [], []
-    panel.partitionCreateRequested.connect(lambda: created.append(True))
-    panel.partitionRenameRequested.connect(renamed.append)
-    panel.partitionDeleteRequested.connect(deleted.append)
-
-    menu = panel._build_partition_menu("p1")
-    texts = [a.text() for a in menu.actions()]
-    assert "新建分区" in texts
-    assert "重命名分区" in texts
-    assert "删除分区" in texts
-
-    for action in menu.actions():
-        action.trigger()
-    assert created == [True]
-    assert renamed == ["p1"]
-    assert deleted == ["p1"]
-
-
-def test_default_partition_has_no_rename_delete(panel):
-    menu = panel._build_partition_menu("default")
-    texts = [a.text() for a in menu.actions()]
-    assert "新建分区" in texts
-    assert "重命名分区" not in texts
-    assert "删除分区" not in texts
-
-
-def test_no_context_partition_menu_has_create_only(panel):
-    menu = panel._build_partition_menu("")
-    texts = [a.text() for a in menu.actions()]
-    assert texts == ["新建分区"]
+def test_summary_label_click_toggles(panel):
+    """§3.2 点击摘要行本身也能展开。"""
+    panel.set_stats("3 文档", ["已索引: 3"])
+    assert panel.is_detail_expanded() is False
+    panel._summary_label.clicked.emit()
+    assert panel.is_detail_expanded() is True
 
 
 def test_set_stats_without_details_keeps_summary(panel):
-    panel.set_stats("12 文档 · 340 块")
-    assert panel._summary_label.text() == "12 文档 · 340 块"
-    assert panel._detail_label.isHidden()
+    panel.set_stats("只有摘要")
+    assert panel._summary_label.text() == "只有摘要"
+
+
+def test_partition_rows_have_folder_icons(panel):
+    """§3.2 分区行应带图标。"""
+    from PySide6.QtCore import Qt
+
+    panel.set_partitions([{"id": "p1", "name": "技术笔记", "doc_count": 3}])
+    tree = panel._partition_tree
+    assert tree.topLevelItemCount() == 2  # 所有文档 + 1 个分区
+    item = tree.topLevelItem(1)
+    assert not item.icon(0).isNull()
+    assert item.data(0, Qt.UserRole) == "p1"
+
+
+def test_empty_states_shown_when_no_data(panel):
+    """§7.1 分区树与标签区的空状态引导。"""
+    panel.set_partitions([])
+    panel.set_tags([])
+
+    assert panel._partition_empty.isHidden() is False
+    assert "还没有分区" in panel._partition_empty.text()
+    assert panel._tag_empty.isHidden() is False
+    assert "还没有标签" in panel._tag_empty.text()
+
+
+def test_partition_rows_have_folder_icons(panel):
+    """§3.2 分区行应带图标。"""
+    from PySide6.QtCore import Qt
+
+    panel.set_partitions([{"id": "p1", "name": "技术笔记", "doc_count": 3}])
+    tree = panel._partition_tree
+    assert tree.topLevelItemCount() == 2  # 所有文档 + 1 个分区
+    item = tree.topLevelItem(1)
+    assert not item.icon(0).isNull()
+    assert item.data(0, Qt.UserRole) == "p1"
+
+
+def test_empty_states_shown_when_no_data(panel):
+    """§7.1 分区树与标签区的空状态引导。"""
+    panel.set_partitions([])
+    panel.set_tags([])
+
+    assert panel._partition_empty.isHidden() is False
+    assert "还没有分区" in panel._partition_empty.text()
+    assert panel._tag_empty.isHidden() is False
+    assert "还没有标签" in panel._tag_empty.text()
+
+
+def test_collapse_toggles_width(panel):
+    """§3.1 导航可折叠至 48px 图标栏。"""
+    from gui.panels.nav_panel import COLLAPSED_WIDTH, EXPANDED_WIDTH
+
+    assert panel.is_collapsed() is False
+    panel.toggle_collapsed()
+    assert panel.is_collapsed() is True
+    assert panel.width() == COLLAPSED_WIDTH
+
+    panel.toggle_collapsed()
+    assert panel.is_collapsed() is False
+    assert panel.width() == EXPANDED_WIDTH

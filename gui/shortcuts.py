@@ -13,13 +13,13 @@ from PySide6.QtWidgets import QWidget
 
 # action_id -> 快捷键序列（设计文档 5.6）
 #
-# 冲突规避：``Ctrl+S`` 在编辑器内是「保存当前笔记」（由编辑器自身拦截），
-# 因此这里的全局「设置」改用 ``Ctrl+,``，符合主流编辑器习惯。
+# Ctrl+S 按设计文档规定绑定「设置」。笔记编辑器内部另有一个事件过滤器先行拦截
+# Ctrl+S 执行保存，因此两者可以共存：焦点在编辑器内时保存笔记，其余场景打开设置。
 DEFAULT_SHORTCUTS: dict[str, str] = {
     "import_docs": "Ctrl+I",
     "focus_global_search": "Ctrl+F",
     "focus_semantic_search": "Ctrl+K",
-    "open_settings": "Ctrl+,",
+    "open_settings": "Ctrl+S",
     "refresh_status": "Ctrl+R",
     "delete_selected": "Delete",
     "clear_selection": "Esc",

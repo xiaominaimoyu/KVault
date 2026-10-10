@@ -30,6 +30,9 @@ ICON_NAMES = (
     "tags",
     "refresh-cw",
     "external-link",
+    # 7.1 空状态所需图标
+    "file-search",
+    "search-x",
 )
 
 # 默认前景色（中性灰，深浅主题均可用）

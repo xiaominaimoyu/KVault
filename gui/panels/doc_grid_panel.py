@@ -85,9 +85,20 @@ class DocGridPanel(QWidget):
 
     def clear_selection(self) -> None:
         self._list.clearSelection()
+        self._sync_card_selection()
 
     # ---- 内部事件 ----
 
+    def _sync_card_selection(self) -> None:
+        """把列表选中态同步到卡片（§3.3.2 选中卡片：2px 强调边框）。"""
+        selected = set(self.selected_doc_ids())
+        for row in range(self._list.count()):
+            card = self._list.itemWidget(self._list.item(row))
+            if card is not None and hasattr(card, "set_selected"):
+                doc_id = self._list.item(row).data(Qt.UserRole)
+                card.set_selected(doc_id in selected)
+
     def _on_selection_changed(self):
+        self._sync_card_selection()
         ids = self.selected_doc_ids()
         self.documentSelected.emit(ids[0] if ids else None)

@@ -44,11 +44,12 @@ class StatusBar(QWidget):
         layout.addWidget(self._status_dot)
 
         self._status_label = QLabel("就绪")
-        self._status_label.setStyleSheet("font-size: 13px;")
+        self._status_label.setObjectName("StatusMessage")
         layout.addWidget(self._status_label)
 
+        # §3.6 统计摘要：--text-xs 等宽 fg-muted
         self._stats_label = QLabel("")
-        self._stats_label.setStyleSheet("font-size: 11px;")
+        self._stats_label.setObjectName("StatusStats")
         self._stats_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self._stats_label)
 

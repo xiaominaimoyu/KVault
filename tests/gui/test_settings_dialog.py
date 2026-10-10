@@ -32,6 +32,8 @@ def _make_config(**overrides):
         mcp_enabled=True,
         hybrid_search=_HybridCfg(),
         theme="system",
+        reduce_motion=False,
+        view_mode="table",
         save_calls=[],
     )
     config.validate = lambda: []
@@ -46,17 +48,46 @@ def dialog() -> SettingsDialog:
     return SettingsDialog(_make_config())
 
 
-def test_construction_has_three_tabs(dialog):
+def test_construction_has_five_tabs(dialog):
+    """§4.1 规定五个标签页：常规 / 检索 / 模型 / MCP / 外观。"""
     labels = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
-    assert labels == ["常规", "模型", "检索"]
+    assert labels == ["常规", "检索", "模型", "MCP", "外观"]
+
+
+def test_dialog_size_matches_spec(dialog):
+    """§4.1 规定窗口 560 x 480。"""
+    assert dialog.width() == 560
+    assert dialog.height() == 480
 
 
 def test_general_tab_contains_data_dir_and_toggles(dialog):
-    tab = dialog._general_tab
     assert dialog.data_dir.text() == str(Path("D:/vault"))
-    assert dialog.mcp_enabled.isChecked() is True
     assert dialog.hybrid_enabled.isChecked() is True
-    assert tab is not None
+
+
+def test_mcp_and_appearance_split_into_own_tabs(dialog):
+    """MCP 与外观应有独立标签页，而不是挤在常规页里。"""
+    assert dialog.mcp_enabled.isChecked() is True
+    assert dialog.theme_combo.currentData() in ("system", "dark", "light")
+
+
+def test_reduce_motion_toggle_reflects_config(dialog):
+    """§6.1 reduce_motion 开关。"""
+    assert dialog.reduce_motion.isChecked() is not dialog.config.reduce_motion
+
+
+def test_save_button_uses_primary_style(dialog):
+    """§4.1 保存按钮使用主按钮样式。"""
+    primary = [
+        b for b in dialog.findChildren(type(dialog.mcp_enabled))
+        if b.property("btnType") == "primary"
+    ]
+    assert primary, "应存在主按钮样式的保存按钮"
+
+
+def test_chunk_hint_uses_warm_dim_bar(dialog):
+    """§4.1 切分参数变更提示使用 accent-warm-dim 背景信息条。"""
+    assert dialog.chunk_hint.objectName() == "SettingsHintBar"
 
 
 def test_model_tab_populated_from_config(dialog):

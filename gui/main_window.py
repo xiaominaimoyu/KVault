@@ -9,20 +9,16 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
     QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
     QStackedWidget,
-    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -37,7 +33,10 @@ from core.retriever import Retriever
 from core.text_splitter import KnowledgeTextSplitter
 from core.vector_store import VectorStore
 from core.workspace import WorkspaceManager
+# 对话框由设计文档 9.3 拆分为独立模块；这里重新导出以保持既有导入路径可用
+from gui.dialogs.incremental_dialog import IncrementalUpdateDialog  # noqa: F401
 from gui.dialogs.settings_dialog import SettingsDialog
+from gui.dialogs.startup_dialog import StartupDialog  # noqa: F401
 from gui.editor.graph_view import GraphView
 from gui.panels.note_workspace import NoteWorkspace
 from gui.panels.detail_panel import DetailPanel
@@ -50,7 +49,7 @@ from gui.panels.doc_list_panel import (
 from gui.panels.nav_panel import NavPanel
 from gui.panels.status_bar import StatusBar
 from gui.panels.top_nav_bar import TopNavBar
-from gui.styles.variables import TOKENS_DARK
+from gui.styles.variables import TOKENS_DARK, TOKENS_LIGHT, score_to_color
 from gui.workers.ingest_worker import IngestWorker
 from gui.workers.search_worker import SearchWorker
 
@@ -88,58 +87,6 @@ class ReindexWorker(QThread):
         self.finished_all.emit(success, fail)
 
 
-class IncrementalUpdateDialog(QDialog):
-    """增量更新对话框，展示差异清单与更新进度。"""
-
-    def __init__(self, incremental_updater, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("增量更新")
-        self.resize(500, 400)
-        self.updater = incremental_updater
-
-        layout = QFormLayout(self)
-        self.status_label = QLabel("正在扫描差异...")
-        layout.addRow("状态", self.status_label)
-
-        self.diff_list = QListWidget()
-        layout.addRow("差异清单", self.diff_list)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("执行更新")
-        buttons.accepted.connect(self._on_update)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
-
-        self._scan()
-
-    def _scan(self):
-        self.diff_list.clear()
-        self._report = self.updater.scan_diffs()
-        for p in self._report.added:
-            self.diff_list.addItem(f"[新增] {p}")
-        for p in self._report.modified:
-            self.diff_list.addItem(f"[修改] {p}")
-        for p in self._report.deleted:
-            self.diff_list.addItem(f"[删除] {p}")
-        for p in self._report.unreadable:
-            self.diff_list.addItem(f"[无法读取] {p}")
-        total = len(self._report.added) + len(self._report.modified) + len(self._report.deleted)
-        self.status_label.setText(f"共 {total} 项变更（新增 {len(self._report.added)}，修改 {len(self._report.modified)}，删除 {len(self._report.deleted)}）")
-
-    def _on_update(self):
-        self.status_label.setText("正在更新...")
-        result = self.updater.update(self._report)
-        self.status_label.setText(
-            f"完成：成功 {result.success_count}，失败 {result.fail_count}"
-        )
-        if result.dirty_doc_ids:
-            QMessageBox.warning(
-                self, "脏数据",
-                f"以下文档索引失败，已跳过：\n" + "\n".join(result.dirty_doc_ids[:10]),
-            )
-        self.accept()
-
-
 class MainWindow(QMainWindow):
     def __init__(self, config: Config):
         super().__init__()
@@ -174,6 +121,7 @@ class MainWindow(QMainWindow):
 
         self.note_store: NoteStore | None = None
         self._current_view: str = "docs"
+        self._resolved_theme: str = "dark"
 
         self.retriever = Retriever(
             embedder=self.embedder,
@@ -273,11 +221,14 @@ class MainWindow(QMainWindow):
         if app is None:
             return "dark"
         resolved = apply_theme(app, theme)
+        self._resolved_theme = resolved
         # 笔记视图自带一套高亮配色，需跟随主题一起切换
         if getattr(self, "note_workspace", None) is not None:
             self.note_workspace.set_theme(resolved)
         if getattr(self, "graph_view", None) is not None:
             self.graph_view.set_theme(resolved)
+        if getattr(self, "doc_list_panel", None) is not None:
+            self.doc_list_panel.set_theme(resolved)
         return resolved
 
     def _setup_shortcuts(self):
@@ -325,12 +276,13 @@ class MainWindow(QMainWindow):
         from gui.editor.quick_switcher import Command, show_command_palette
 
         commands = [
-            Command("新建笔记", lambda: self._switch_view("notes"), "Ctrl+N"),
+            Command("新建笔记", lambda: self._switch_view("notes"), "Ctrl+Shift+N"),
             Command("打开图谱", lambda: self._switch_view("graph"), "Ctrl+G"),
             Command("切换到文档", lambda: self._switch_view("docs")),
             Command("快速打开笔记", self._open_quick_switcher, "Ctrl+O"),
             Command("语义检索", self._focus_semantic_search, "Ctrl+K"),
             Command("刷新笔记索引", self._sync_notes, "Ctrl+R"),
+            Command("保存当前笔记", lambda: self.note_workspace.save_current(), "Ctrl+S"),
             Command("设置", self._open_settings, "Ctrl+S"),
         ]
         dialog = show_command_palette(self, commands)
@@ -368,9 +320,14 @@ class MainWindow(QMainWindow):
         self.top_nav_bar.workspaceSwitchRequested.connect(self._switch_workspace)
         self.top_nav_bar.workspaceCreateRequested.connect(self._on_workspace_create)
         self.top_nav_bar.workspaceDeleteRequested.connect(self._on_workspace_delete)
+        self.top_nav_bar.viewActionRequested.connect(self._switch_view)
+        self.top_nav_bar.quickSwitchRequested.connect(self._open_quick_switcher)
+        self.top_nav_bar.commandPaletteRequested.connect(self._open_command_palette)
 
     def _setup_central_layout(self):
-        self.status_bar = StatusBar()
+        self.status_bar = StatusBar(
+            reduce_motion=getattr(self.config, "reduce_motion", False)
+        )
 
 
         container = QWidget()
@@ -420,6 +377,9 @@ class MainWindow(QMainWindow):
         self.doc_list_panel.importRequested.connect(self._on_import)
         self.doc_list_panel.filesDropped.connect(self._import_paths)
         self.doc_list_panel.batchActionRequested.connect(self._on_batch_action)
+        # §3.3.3 视图模式记忆到 config
+        self.doc_list_panel.attach_config(self.config)
+        self.doc_list_panel.set_theme(self._resolved_theme)
 
         self.detail_panel = DetailPanel(default_top_k=self.config.top_k)
         self.detail_panel.searchRequested.connect(self._on_search)
@@ -571,12 +531,25 @@ class MainWindow(QMainWindow):
             f"{stats.get('total_docs', 0)} 文档 · "
             f"{stats.get('total_chunks', 0)} 块 · {model_name}"
         )
+        # §3.2 展开为 4 行详细统计
         details = [
             f"已索引: {stats.get('indexed_docs', 0)}",
             f"失败: {stats.get('failed_docs', 0)}",
             f"向量数: {chroma_count}",
+            f"分区: {stats.get('partition_count', 0)} · 标签: {stats.get('tag_count', 0)}",
         ]
         self.nav_panel.set_stats(summary, details)
+
+        # §3.5 工作区下拉旁展示文档数徽章
+        self.top_nav_bar.set_doc_count_badge(stats.get("total_docs", 0))
+
+        # §3.6 Ollama 状态指示
+        self.status_bar.set_ollama_status(self.embedder.is_available())
+
+    def _sync_doc_count_badge(self) -> None:
+        """单独刷新文档数徽章（不重算完整统计）。"""
+        stats = self.metadata.get_stats()
+        self.top_nav_bar.set_doc_count_badge(stats.get("total_docs", 0))
 
     def _on_import(self):
         paths, _ = QFileDialog.getOpenFileNames(
@@ -700,49 +673,32 @@ class MainWindow(QMainWindow):
         self._load_preview(doc_id)
 
     def _load_preview(self, doc_id: str):
+        preview = self.detail_panel.preview_tab
         doc = self.metadata.get_document(doc_id)
         if doc is None:
-            self.detail_panel.preview_tab.set_html("文档不存在")
+            preview.set_not_found("文档不存在")
             return
 
-        lines = [
-            f"<h2>{_esc(doc.file_name)}</h2>",
-            f"<p><b>格式:</b> {_esc(doc.file_ext.upper())} &nbsp; "
-            f"<b>大小:</b> {format_size(doc.file_size)} &nbsp; "
-            f"<b>状态:</b> {_esc(STATUS_LABELS.get(doc.status, doc.status))} &nbsp; "
-            f"<b>块数:</b> {doc.chunk_count}</p>",
-            f"<p><b>分区:</b> {_esc(doc.partition_name or '未分类')} &nbsp; "
-            f"<b>标签:</b> {_esc(', '.join(t['name'] for t in self.metadata.get_document_tags(doc.id)))}</p>",
-            f"<p><b>存储路径:</b> {_esc(doc.stored_path)}</p>",
-            "<hr>",
-        ]
-
+        content = ""
         if doc.status == "indexed" and Path(doc.stored_path).exists():
             try:
-                parsed = self.parser.parse(doc.stored_path)
-                lines.append("<h3>内容预览</h3>")
-                content = _esc(parsed.content).replace("\n", "<br>")
-                lines.append(f"<p>{content[:4000]}</p>")
+                content = self.parser.parse(doc.stored_path).content
+            except Exception:  # noqa: BLE001 —— 预览失败不应中断元数据加载
+                logger.warning("预览加载失败: %s", doc_id, exc_info=True)
+                content = ""
 
-                chunks = self.metadata.get_document_chunks(doc_id)
-                if chunks:
-                    lines.append("<h3>文本块概览</h3>")
-                    for ch in chunks:
-                        idx = ch["chunk_index"]
-                        preview = _esc(ch["content_preview"])
-                        lines.append(
-                            f"<p><b>块 {idx + 1}:</b> {preview}...</p>"
-                        )
-            except Exception as e:
-                lines.append(f"<p style='color:red'>预览加载失败: {_esc(e)}</p>")
-        elif doc.status == "failed":
-            lines.append(
-                f"<p style='color:red'><b>索引失败:</b> {_esc(doc.error_message or '未知错误')}</p>"
-            )
-        else:
-            lines.append("<p>文档尚未完成索引，暂无预览。</p>")
+        html_text = preview.build_document_html(
+            doc,
+            content=content,
+            chunks=self.metadata.get_document_chunks(doc_id),
+            tags=self.metadata.get_document_tags(doc_id),
+            partitions=doc.partition_name or "未分类",
+            error_message=(doc.error_message or "") if doc.status == "failed" else "",
+            size_label=format_size(doc.file_size),
+            status_label=STATUS_LABELS.get(doc.status, doc.status),
+        )
+        preview.set_html(html_text)
 
-        self.detail_panel.preview_tab.set_html("\n".join(lines))
         self._load_metadata(doc)
         self.detail_panel.switch_to_preview()
 
@@ -1037,11 +993,14 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.resolve())))
 
     def _score_color(self, score: float) -> str:
-        if score >= 0.8:
-            return TOKENS_DARK["status-success"]
-        if score >= 0.5:
-            return TOKENS_DARK["status-warning"]
-        return TOKENS_DARK["status-error"]
+        """相似度分数 → 颜色。
+
+        必须跟随当前主题——早前硬编码 ``TOKENS_DARK`` 导致浅色主题下返回深色
+        配色，在浅背景上几乎不可读。
+        """
+        theme = getattr(self, "_resolved_theme", "dark")
+        tokens = TOKENS_DARK if theme == "dark" else TOKENS_LIGHT
+        return tokens[score_to_color(score)]
 
     def _reload_workspace_combo(self):
         workspaces = [

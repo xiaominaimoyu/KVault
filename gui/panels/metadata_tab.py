@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
-    QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,

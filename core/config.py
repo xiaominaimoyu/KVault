@@ -103,6 +103,18 @@ class Config:
     similarity_threshold: float = 0.5
     mcp_enabled: bool = False
     theme: str = "system"
+    reduce_motion: bool = False
+    """是否禁用全部界面动效（对应系统级 prefers-reduced-motion）。
+
+    设计文档 6.1 要求该配置项；GUI 重设计文档 10.2 声称不改``core``，
+    但两者冲突——动效规范没有这个字段就无法落地，因此以 6.1 为准。
+    ``gui/widgets/motion.py`` 与 ``StatusDot`` 的脉动动画均读取此值。
+    """
+
+    #: 文档列表视图模式：``"table"``（列表）/ ``"grid"``（卡片）
+    #: 对应设计文档 3.3.3「记忆用户选择到 config」
+    view_mode: str = "table"
+
     last_index_model: str | None = None
     last_index_dimension: int | None = None
     last_index_at: float | None = None
@@ -132,6 +144,10 @@ class Config:
             )
         if self.top_k <= 0:
             errors.append(f"top_k must be > 0, got {self.top_k}")
+        if self.view_mode not in ("table", "grid"):
+            errors.append(
+                f"view_mode must be 'table' or 'grid', got '{self.view_mode}'"
+            )
         errors.extend(self.hybrid_search.validate())
         errors.extend(self.workspaces.validate())
         if self.embedding_backend not in ("ollama", "llama_cpp"):

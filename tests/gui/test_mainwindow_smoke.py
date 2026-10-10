@@ -54,9 +54,41 @@ def test_startup_dialog_no_hardcoded_colors():
 
 
 def test_startup_dialog_uses_tokens():
-    """startup_dialog.py 应引用 TOKENS_DARK。"""
-    sd = (_REPO_ROOT / "gui" / "startup_dialog.py").read_text(encoding="utf-8")
+    """startup_dialog.py 应使用 TOKENS_DARK，且实现位于 gui/dialogs/ 下（§9.3）。"""
+    sd = (_REPO_ROOT / "gui" / "dialogs" / "startup_dialog.py").read_text(encoding="utf-8")
     assert "TOKENS_DARK" in sd
+    # 兼容层仅做转发
+    legacy = (_REPO_ROOT / "gui" / "startup_dialog.py").read_text(encoding="utf-8")
+    assert "from gui.dialogs.startup_dialog import StartupDialog" in legacy
+
+
+def test_startup_dialog_card_uses_object_name():
+    """§4.2 检查卡片应通过 QSS 对象名取样式，而非内联颜色。"""
+    sd = (_REPO_ROOT / "gui" / "dialogs" / "startup_dialog.py").read_text(encoding="utf-8")
+    assert "StartupCheckCard" in sd
+    assert "StartupCheckSuggestion" in sd
+
+
+def test_dialogs_are_split_into_modules():
+    """§9.3 要求 startup / incremental / model_switch 三个对话框独立成文件。"""
+    dialogs = _REPO_ROOT / "gui" / "dialogs"
+    for name in ("startup_dialog.py", "incremental_dialog.py", "model_switch_dialog.py"):
+        assert (dialogs / name).is_file(), f"缺少 {name}"
+
+
+def test_model_switch_dialog_uses_step_indicator():
+    """§4.4 模型切换对话框必须使用步骤指示器。"""
+    src = (_REPO_ROOT / "gui" / "dialogs" / "model_switch_dialog.py").read_text(encoding="utf-8")
+    assert "StepIndicator" in src
+    assert "ErrorBanner" in src
+
+
+def test_incremental_dialog_uses_step_indicator():
+    """§4.3 增量更新对话框必须使用步骤指示器与三色差异标签。"""
+    src = (_REPO_ROOT / "gui" / "dialogs" / "incremental_dialog.py").read_text(encoding="utf-8")
+    assert "StepIndicator" in src
+    for kind in ("DiffAdded", "DiffModified", "DiffDeleted"):
+        assert kind in src
 
 
 def test_main_window_no_plain_setstylesheet_with_colors():

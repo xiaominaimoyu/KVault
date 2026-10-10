@@ -5,8 +5,8 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 from core.config import Config
 from core.startup_check import StartupChecker
+from gui.dialogs.startup_dialog import StartupDialog
 from gui.main_window import MainWindow
-from gui.startup_dialog import StartupDialog
 
 
 def _setup_logging(logs_dir: Path):

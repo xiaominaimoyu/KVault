@@ -1,0 +1,387 @@
+/* ==========================================================================
+   Vault Standard 补充样式 —— 对应《GUI重新设计文档》中尚未覆盖的条款
+   本文件在 theme_{dark,light}.qss 之后追加，同名选择器以此为准。
+   ========================================================================== */
+
+/* --- §2.6 层级：L1 表面（bg-surface + 右/下 1px 分割线） --- */
+QWidget#TopNavBar {
+    background-color: %(bg-surface)s;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+QWidget#StatusBar {
+    background-color: %(bg-surface)s;
+    border-top: 1px solid %(fg-faint)s;
+}
+QWidget#ViewSwitchBar {
+    background-color: %(bg-surface)s;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+
+/* --- §2.6 层级：L2 浮起（bg-raised + 全边框 + 2px 上偏移微亮） --- */
+QFrame[panelType="raised"] {
+    background-color: %(bg-raised)s;
+    border: 1px solid %(fg-faint)s;
+    border-top: 2px solid %(fg-muted)s;
+    border-radius: 8px;
+}
+QMenu {
+    background-color: %(bg-raised)s;
+    border: 1px solid %(accent-primary-dim)s;
+    border-radius: 8px;
+    padding: 8px;
+}
+QMenu::item {
+    padding: 6px 24px 6px 16px;
+    min-height: 32px;
+    font-size: 13px;
+    border-radius: 4px;
+}
+QMenu::item:selected {
+    background-color: %(accent-primary-dim)s;
+}
+QMenu::separator {
+    height: 1px;
+    background-color: %(fg-faint)s;
+    margin: 4px 8px;
+}
+QMenu::item[danger="true"] {
+    color: %(status-error)s;
+}
+QMenu::item[danger="true"]:selected {
+    background-color: %(status-error)s;
+    color: #FFFFFF;
+}
+
+/* --- §8.2 输入框：placeholder 弱化斜体 + 聚焦外发光 --- */
+QLineEdit::placeholder,
+QTextEdit::placeholder {
+    color: %(fg-muted)s;
+    font-style: italic;
+}
+QLineEdit:focus {
+    border: 1px solid %(accent-primary)s;
+}
+/* Qt QSS 不支持 box-shadow，用双层内嵌边框近似「2px 外发光」 */
+QLineEdit:focus {
+    border: 2px solid rgba(45, 212, 191, 78);
+}
+
+/* --- §8.3 下拉选择器：弹出列表每项 32px 行高 --- */
+QComboBox QAbstractItemView::item {
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 14px;
+    border-radius: 4px;
+}
+QComboBox QAbstractItemView::item:selected {
+    background-color: %(accent-primary-dim)s;
+}
+
+/* --- §8.7 分数条：高 4px、radius-full、按分数区间着色 --- */
+#ScoreBar {
+    background-color: transparent;
+}
+#ScoreBarTrack {
+    background-color: %(bg-inset)s;
+    border-radius: 9999px;
+    min-height: 4px;
+    max-height: 4px;
+}
+#ScoreBarTrack::chunk {
+    border-radius: 9999px;
+    min-height: 4px;
+    max-height: 4px;
+    background-color: %(accent-primary)s;
+}
+/* 分数区间色由 score_band 属性驱动 */
+#ScoreBarTrack[band="success"]::chunk { background-color: %(status-success)s; }
+#ScoreBarTrack[band="warning"]::chunk { background-color: %(status-warning)s; }
+#ScoreBarTrack[band="error"]::chunk   { background-color: %(status-error)s; }
+#ScoreBarLabel {
+    color: %(fg-secondary)s;
+    font-size: 13px;
+    min-width: 40px;
+}
+
+/* --- §8.8 卡片：hover 强调边框、选中 2px + 强调色底 --- */
+QFrame#DocCard {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+QFrame#DocCard:hover {
+    border: 1px solid %(accent-primary)s;
+}
+QFrame#DocCard[selected="true"] {
+    border: 2px solid %(accent-primary)s;
+    background-color: rgba(45, 212, 191, 26);
+}
+/* §8.1 危险按钮补齐交互态 */
+QPushButton[btnType="danger"]:hover {
+    background-color: %(status-error)s;
+    color: #FFFFFF;
+}
+QPushButton[btnType="danger"]:disabled {
+    background-color: %(bg-raised)s;
+    color: %(fg-muted)s;
+}
+QPushButton[btnType="primary"]:disabled {
+    background-color: %(bg-raised)s;
+    color: %(fg-muted)s;
+}
+QPushButton[btnType="secondary"]:disabled {
+    color: %(fg-muted)s;
+}
+
+/* --- §8.9 树节点：12px 展开/折叠箭头 --- */
+QTreeWidget::branch:has-children:!has-siblings:closed,
+QTreeWidget::branch:closed:has-children:has-siblings {
+    border-image: none;
+    image: none;
+}
+QTreeWidget::branch:has-siblings:!has-children,
+QTreeWidget::branch:!has-children:!has-siblings {
+    border: none;
+    background: none;
+}
+
+/* --- §7.1 空状态：48px 图标、图标与标题 16px --- */
+#EmptyStateIcon {
+    font-size: 48px;
+}
+
+/* --- §8.4 标签 pill：--text-xs + TagPill 控件样式 --- */
+#TagPillList {
+    font-size: 11px;
+}
+QPushButton#TagPill {
+    background-color: %(bg-inset)s;
+    color: %(fg-secondary)s;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    text-align: center;
+}
+QPushButton#TagPill:hover {
+    background-color: %(bg-raised)s;
+    color: %(fg-primary)s;
+}
+QPushButton#TagPill:checked,
+QPushButton#TagPill[selected="true"] {
+    background-color: rgba(45, 212, 191, 38);
+    color: %(accent-primary)s;
+    border-color: %(accent-primary)s;
+}
+QPushButton#TagPill:focus {
+    border-color: %(accent-primary)s;
+}
+
+/* --- §4.1 设置对话框信息条 --- */
+#SettingsHintBar {
+    background-color: rgba(245, 166, 35, 36);
+    border: 1px solid %(accent-warm-dim)s;
+    border-radius: 6px;
+    color: %(accent-warm)s;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+/* --- §3.4.1 预览标签页 --- */
+#PreviewInfoCard {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+#PreviewInfoTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: %(fg-primary)s;
+}
+#PreviewInfoMeta {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+}
+#PreviewBody {
+    background-color: transparent;
+    border: none;
+    /* §2.3 预览正文使用衬线体，提升长文阅读舒适度 */
+    font-family: "Inter", "Source Han Serif SC", "Noto Serif CJK SC", serif;
+}
+/* §3.4.1 命中块：warm-dim 背景 + 左 3px warm 边框 */
+#PreviewBody .hit-chunk {
+    background-color: rgba(184, 119, 20, 60);
+    border-left: 3px solid %(accent-warm)s;
+    padding: 6px 10px;
+    margin: 4px 0;
+    border-radius: 0 4px 4px 0;
+}
+#PreviewBody .chunk-card {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 4px 0;
+}
+
+/* --- §3.4.1 块折叠标题 --- */
+#PreviewChunkHeader {
+    background-color: %(bg-raised)s;
+    color: %(fg-secondary)s;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+/* --- §3.4.2 检索结果卡片 --- */
+#SearchResultCard {
+    background-color: %(bg-surface)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 8px;
+}
+#SearchResultCard:hover {
+    border: 1px solid %(accent-primary)s;
+}
+#SearchResultCard[selected="true"] {
+    border: 2px solid %(accent-primary)s;
+    background-color: rgba(45, 212, 191, 26);
+}
+#SearchResultName {
+    font-size: 14px;
+    color: %(fg-primary)s;
+    font-weight: 500;
+}
+#SearchResultMeta {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+}
+#SearchResultPreview {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+}
+#SearchQueryInput {
+    min-height: 40px;
+    font-size: 14px;
+}
+
+/* --- §7.2 加载态 spinner --- */
+#SearchSpinner {
+    color: %(accent-primary)s;
+    font-size: 13px;
+}
+
+/* --- §3.5 顶部导航栏 --- */
+#TopNavBarLogo {
+    font-size: 16px;
+}
+#TopNavBarTitle {
+    font-size: 15px;
+    font-weight: 600;
+    color: %(fg-primary)s;
+}
+#TopNavBarSearch {
+    min-height: 32px;
+    border-radius: 6px;
+}
+#DocCountBadge {
+    background-color: %(bg-inset)s;
+    color: %(fg-secondary)s;
+    border-radius: 9999px;
+    padding: 1px 8px;
+    font-size: 11px;
+}
+
+/* --- §3.6 状态栏统计：--text-xs 等宽 fg-muted --- */
+#StatusStats {
+    font-size: 11px;
+    color: %(fg-muted)s;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+#StatusMessage {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+}
+
+/* --- §3.2 导航面板统计卡 --- */
+#StatsSummary {
+    font-size: 11px;
+    color: %(fg-muted)s;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+#StatsDetail {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+}
+#StatsCard:hover {
+    border: 1px solid %(accent-primary-dim)s;
+}
+
+/* --- §4.3 增量更新三色标签 --- */
+#DiffAdded    { color: %(status-success)s; background-color: rgba(52, 211, 153, 30);
+                border: 1px solid %(status-success)s; border-radius: 9999px; padding: 1px 8px; }
+#DiffModified { color: %(status-warning)s; background-color: rgba(251, 191, 36, 30);
+                border: 1px solid %(status-warning)s; border-radius: 9999px; padding: 1px 8px; }
+#DiffDeleted  { color: %(status-error)s;   background-color: rgba(248, 113, 113, 30);
+                border: 1px solid %(status-error)s;   border-radius: 9999px; padding: 1px 8px; }
+#DiffPath {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+
+/* --- §4.4 模型切换回滚提示 --- */
+#ErrorBanner {
+    background-color: rgba(248, 113, 113, 36);
+    border: 1px solid %(status-error)s;
+    border-radius: 6px;
+    color: %(status-error)s;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+/* --- §4.6 消息对话框 --- */
+#MessageDialogIcon {
+    font-size: 32px;
+}
+#MessageDialogTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: %(fg-primary)s;
+}
+#MessageDialogBody {
+    font-size: 14px;
+    color: %(fg-secondary)s;
+}
+
+/* --- §4.2 启动检查卡片 --- */
+#StartupCheckCard {
+    background-color: %(bg-raised)s;
+    border: 1px solid %(fg-faint)s;
+    border-radius: 6px;
+}
+#StartupCheckSuggestion {
+    font-size: 13px;
+    color: %(fg-secondary)s;
+    font-style: italic;
+}
+
+/* --- §3.3.1 数值列：等宽右对齐 --- */
+#NumericCell {
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 13px;
+    color: %(fg-secondary)s;
+}
+
+/* --- §3.1 导航折叠按钮 --- */
+#NavCollapseButton {
+    background-color: transparent;
+    border: none;
+    color: %(fg-muted)s;
+    min-width: 24px;
+}
+#NavCollapseButton:hover {
+    color: %(fg-primary)s;
+    background-color: %(bg-raised)s;
+    border-radius: 4px;
+}

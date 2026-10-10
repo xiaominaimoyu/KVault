@@ -29,6 +29,7 @@ class EmptyState(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
+        # 设计文档 7.1：图标↔标题 16px、标题↔副标题 8px
         layout.setSpacing(8)
         layout.addStretch(1)
 
@@ -36,6 +37,7 @@ class EmptyState(QWidget):
         self._icon_label.setObjectName("EmptyStateIcon")
         self._icon_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self._icon_label)
+        layout.addSpacing(8)  # 图标与标题之间额外留白
 
         self._title_label = QLabel(title)
         self._title_label.setObjectName("EmptyStateTitle")

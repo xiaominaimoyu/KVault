@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -99,6 +100,8 @@ class DocListPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("DocListPanel")
         self._reduce_motion = reduce_motion
+        self._theme = "dark"
+        self._config = None
         self._overlay_anim = None
         self._empty_anim = None
         self._view_mode = "table"
@@ -126,7 +129,7 @@ class DocListPanel(QWidget):
         self._card_view_btn = QPushButton("卡片")
         self._card_view_btn.setObjectName("ViewToggleButton")
         self._card_view_btn.setCheckable(True)
-        self._card_view_btn.clicked.connect(lambda: self.set_view_mode("card"))
+        self._card_view_btn.clicked.connect(lambda: self.set_view_mode("grid"))
         header.addWidget(self._card_view_btn)
         layout.addLayout(header)
 
@@ -134,10 +137,11 @@ class DocListPanel(QWidget):
         self._stacked = QStackedWidget()
         layout.addWidget(self._stacked, 1)
 
+        # §7.1 规定图标 / 标题 / 副标题文案
         self._empty_state = EmptyState(
-            "📭",
-            "暂无文档",
-            "导入你的第一份文档，开始构建知识库",
+            "🔍",
+            "还没有文档",
+            "拖拽文件到此处，或点击导入",
             cta_text="导入文档",
         )
         self._empty_state.ctaClicked.connect(self.importRequested)
@@ -180,25 +184,46 @@ class DocListPanel(QWidget):
         Args:
             docs: 文档对象列表，需含 id/file_name/file_ext/file_size/status/chunk_count/created_at。
         """
+        from gui.styles.variables import TOKENS_DARK, TOKENS_LIGHT
+
+        tokens = TOKENS_DARK if getattr(self, "_theme", "dark") == "dark" else TOKENS_LIGHT
+
         self._table.setRowCount(0)
         self._grid.set_documents(docs)
         for doc in docs:
             row = self._table.rowCount()
             self._table.insertRow(row)
-            self._table.setItem(row, 0, QTableWidgetItem(doc.file_name))
+
+            # §3.3.1 文档名：--text-base --fg-primary；失败态用 --status-error
+            name_item = QTableWidgetItem(doc.file_name)
+            if doc.status == "failed":
+                name_item.setForeground(QColor(tokens["status-error"]))
+            self._table.setItem(row, 0, name_item)
+
             self._table.setCellWidget(row, 1, FormatBadge(doc.file_ext))
-            self._table.setItem(row, 2, QTableWidgetItem(format_size(doc.file_size)))
             self._table.setCellWidget(
                 row, 3, StatusCell(doc.status, self._reduce_motion)
             )
 
+            # §3.3.1 块数 / 大小：--text-sm 等宽、右对齐、--fg-secondary
+            size_item = QTableWidgetItem(format_size(doc.file_size))
+            size_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self._table.setItem(row, 2, size_item)
+
             chunk_item = QTableWidgetItem(str(doc.chunk_count))
-            chunk_item.setTextAlignment(Qt.AlignCenter)
+            chunk_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self._table.setItem(row, 4, chunk_item)
 
-            self._table.setItem(row, 5, QTableWidgetItem(format_time(doc.created_at)))
+            time_item = QTableWidgetItem(format_time(doc.created_at))
+            time_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self._table.setItem(row, 5, time_item)
+
             self._table.setItem(row, _COL_DOC_ID, QTableWidgetItem(doc.id))
         self._sync_view()
+
+    def set_theme(self, theme: str) -> None:
+        """记录当前主题，供失败态着色使用。"""
+        self._theme = theme
 
     def row_count(self) -> int:
         return self._table.rowCount()
@@ -206,17 +231,33 @@ class DocListPanel(QWidget):
     # ---- 视图模式 ----
 
     def view_mode(self) -> str:
-        """返回当前视图模式："table" 或 "card"。"""
+        """返回当前视图模式：``"table"``（列表）或 ``"grid"``（卡片网格）。"""
         return self._view_mode
 
     def set_view_mode(self, mode: str) -> None:
-        """切换视图模式，无效值将被忽略。"""
-        if mode not in ("table", "card"):
+        """切换视图模式，无效值将被忽略。
+
+        §3.3.3：切换结果会写入 ``config.view_mode`` 以记忆用户选择。
+        """
+        if mode not in ("table", "grid"):
             return
         self._view_mode = mode
         self._table_view_btn.setChecked(mode == "table")
-        self._card_view_btn.setChecked(mode == "card")
+        self._card_view_btn.setChecked(mode == "grid")
         self._sync_view()
+        self._persist_view_mode()
+
+    def _persist_view_mode(self) -> None:
+        """把视图模式写入配置。"""
+        config = getattr(self, "_config", None)
+        if config is not None:
+            config.view_mode = self._view_mode
+
+    def attach_config(self, config) -> None:
+        """绑定配置：读取记忆的视图模式并启用持久化。"""
+        self._config = config
+        if config is not None:
+            self.set_view_mode(getattr(config, "view_mode", "table"))
 
     def _sync_view(self):
         """根据文档数与视图模式刷新当前页。"""
@@ -239,7 +280,7 @@ class DocListPanel(QWidget):
         return self._table if self._view_mode == "table" else self._grid
 
     def selected_doc_ids(self) -> list[str]:
-        if self._view_mode == "card":
+        if self._view_mode == "grid":
             return self._grid.selected_doc_ids()
         rows = set(idx.row() for idx in self._table.selectedIndexes())
         return [self._table.item(row, _COL_DOC_ID).text() for row in rows]
@@ -250,7 +291,7 @@ class DocListPanel(QWidget):
         Returns:
             是否找到并选中。
         """
-        if self._view_mode == "card":
+        if self._view_mode == "grid":
             return self._grid.select_doc(doc_id)
         for row in range(self._table.rowCount()):
             if self._table.item(row, _COL_DOC_ID).text() == doc_id:

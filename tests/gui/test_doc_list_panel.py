@@ -84,22 +84,22 @@ def test_default_view_mode_is_table(panel):
 
 def test_set_view_mode_card_shows_grid(panel):
     panel.set_documents([_doc()])
-    panel.set_view_mode("card")
-    assert panel.view_mode() == "card"
+    panel.set_view_mode("grid")
+    assert panel.view_mode() == "grid"
     assert panel._stacked.currentWidget() is panel._grid
 
 
 def test_set_view_mode_table_shows_table(panel):
     panel.set_documents([_doc()])
-    panel.set_view_mode("card")
+    panel.set_view_mode("grid")
     panel.set_view_mode("table")
     assert panel._stacked.currentWidget() is panel._table
 
 
 def test_invalid_view_mode_ignored(panel):
-    panel.set_view_mode("card")
+    panel.set_view_mode("grid")
     panel.set_view_mode("bogus")
-    assert panel.view_mode() == "card"
+    assert panel.view_mode() == "grid"
 
 
 def test_card_view_populates_grid(panel):
@@ -108,7 +108,7 @@ def test_card_view_populates_grid(panel):
 
 
 def test_card_view_shows_empty_state_when_no_docs(panel):
-    panel.set_view_mode("card")
+    panel.set_view_mode("grid")
     panel.set_documents([])
     assert panel._stacked.currentWidget() is panel._empty_state
 
@@ -116,14 +116,14 @@ def test_card_view_shows_empty_state_when_no_docs(panel):
 def test_view_toggle_buttons_switch_mode(panel):
     panel.set_documents([_doc()])
     panel._card_view_btn.click()
-    assert panel.view_mode() == "card"
+    assert panel.view_mode() == "grid"
     panel._table_view_btn.click()
     assert panel.view_mode() == "table"
 
 
 def test_selected_doc_ids_works_in_card_view(panel):
     panel.set_documents([_doc(), _doc(id="d2")])
-    panel.set_view_mode("card")
+    panel.set_view_mode("grid")
     assert panel._grid.select_doc("d2")
     assert panel.selected_doc_ids() == ["d2"]
 

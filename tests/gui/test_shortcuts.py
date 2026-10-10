@@ -16,8 +16,7 @@ def test_default_shortcuts_cover_design_doc():
         "import_docs": "Ctrl+I",
         "focus_global_search": "Ctrl+F",
         "focus_semantic_search": "Ctrl+K",
-        # Ctrl+S 已让给编辑器的「保存笔记」，设置改用 Ctrl+,
-        "open_settings": "Ctrl+,",
+        "open_settings": "Ctrl+S",
         "refresh_status": "Ctrl+R",
         "delete_selected": "Delete",
         "clear_selection": "Esc",
@@ -27,6 +26,25 @@ def test_default_shortcuts_cover_design_doc():
     }
     for action_id, key in expected.items():
         assert DEFAULT_SHORTCUTS[action_id] == key, f"{action_id} 应为 {key}"
+
+
+def test_editor_save_does_not_conflict_with_settings(qapp):
+    """§5.6 Ctrl+S 为设置；编辑器内另由事件过滤器拦截实现保存，二者共存。"""
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+
+    from gui.editor.markdown_editor import MarkdownEditor
+
+    assert DEFAULT_SHORTCUTS["open_settings"] == "Ctrl+S"
+
+    editor = MarkdownEditor()
+    calls = []
+    editor.saveRequested.connect(lambda: calls.append(1))
+    # 编辑器先拦截，事件被消费，全局快捷键不会触发
+    qapp.sendEvent(
+        editor.editor, QKeyEvent(QEvent.KeyPress, Qt.Key_S, Qt.ControlModifier)
+    )
+    assert calls == [1]
 
 
 def test_no_duplicate_key_bindings():

@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QWidget,
@@ -39,6 +41,10 @@ class TopNavBar(QWidget):
     workspaceSwitchRequested = Signal(str)
     workspaceCreateRequested = Signal()
     workspaceDeleteRequested = Signal()
+    viewActionRequested = Signal(str)
+    """菜单请求切换视图，参数为 ``docs`` / ``notes`` / ``graph``。"""
+    quickSwitchRequested = Signal()
+    commandPaletteRequested = Signal()
 
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -52,18 +58,25 @@ class TopNavBar(QWidget):
         layout.setContentsMargins(16, 0, 16, 0)
         layout.setSpacing(12)
 
-        logo_label = QLabel("▣")
-        logo_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        # §3.5 Logo：16px SVG 图标 + 文字
+        logo_label = QLabel()
+        logo_label.setObjectName("TopNavBarLogo")
+        logo_label.setPixmap(icon("layers", size=16).pixmap(16, 16))
         layout.addWidget(logo_label)
 
         title_label = QLabel("KVault")
-        title_label.setStyleSheet("font-size: 15px; font-weight: 600;")
+        title_label.setObjectName("TopNavBarTitle")
         layout.addWidget(title_label)
 
         self._search_box = QLineEdit()
+        self._search_box.setObjectName("TopNavBarSearch")
         self._search_box.setPlaceholderText("全局搜索：文件名 / 扩展名 / 分区 / 标签")
         self._search_box.setMinimumWidth(320)
         self._search_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # §3.5 搜索框左侧搜索图标
+        self._search_box.addAction(
+            icon("search", size=14), QLineEdit.LeadingPosition
+        )
         self._search_box.textChanged.connect(self.searchChanged.emit)
         layout.addWidget(self._search_box)
 
@@ -72,18 +85,21 @@ class TopNavBar(QWidget):
         self._workspace_combo.currentIndexChanged.connect(self._on_workspace_changed)
         layout.addWidget(self._workspace_combo)
 
+        # §3.5 工作区下拉旁展示文档数徽章
         self._doc_count_badge = QLabel("")
-        self._doc_count_badge.setStyleSheet("font-size: 11px;")
+        self._doc_count_badge.setObjectName("DocCountBadge")
         layout.addWidget(self._doc_count_badge)
 
-        ws_create_btn = QPushButton("+")
+        ws_create_btn = QPushButton()
         ws_create_btn.setProperty("btnType", "icon")
+        ws_create_btn.setIcon(icon("folder-plus", size=16))
         ws_create_btn.setToolTip("新建工作区")
         ws_create_btn.clicked.connect(self.workspaceCreateRequested.emit)
         layout.addWidget(ws_create_btn)
 
-        ws_delete_btn = QPushButton("−")
+        ws_delete_btn = QPushButton()
         ws_delete_btn.setProperty("btnType", "icon")
+        ws_delete_btn.setIcon(icon("trash-2", size=16))
         ws_delete_btn.setToolTip("删除工作区")
         ws_delete_btn.clicked.connect(self.workspaceDeleteRequested.emit)
         layout.addWidget(ws_delete_btn)
@@ -107,6 +123,46 @@ class TopNavBar(QWidget):
         self._logs_btn.setToolTip("日志")
         self._logs_btn.clicked.connect(self.logsRequested.emit)
         layout.addWidget(self._logs_btn)
+
+        # §3.5 右侧菜单按钮
+        self._menu_btn = QPushButton()
+        self._menu_btn.setProperty("btnType", "icon")
+        self._menu_btn.setText("☰")
+        self._menu_btn.setToolTip("更多")
+        self._menu_btn.clicked.connect(self._on_menu_clicked)
+        layout.addWidget(self._menu_btn)
+
+        self._menu = self._build_menu()
+
+    def _build_menu(self) -> QMenu:
+        """构建「更多」下拉菜单。"""
+        menu = QMenu(self)
+
+        notes_action = QAction("笔记库", menu)
+        notes_action.triggered.connect(lambda: self.viewActionRequested.emit("notes"))
+        menu.addAction(notes_action)
+
+        graph_action = QAction("知识图谱", menu)
+        graph_action.triggered.connect(lambda: self.viewActionRequested.emit("graph"))
+        menu.addAction(graph_action)
+
+        menu.addSeparator()
+
+        switch_action = QAction("快速切换笔记", menu)
+        switch_action.setShortcut("Ctrl+O")
+        switch_action.triggered.connect(self.quickSwitchRequested.emit)
+        menu.addAction(switch_action)
+
+        palette_action = QAction("命令面板", menu)
+        palette_action.setShortcut("Ctrl+P")
+        palette_action.triggered.connect(self.commandPaletteRequested.emit)
+        menu.addAction(palette_action)
+
+        return menu
+
+    def _on_menu_clicked(self) -> None:
+        """弹出「更多」菜单。"""
+        self._menu.exec(self._menu_btn.mapToGlobal(self._menu_btn.rect().bottomLeft()))
 
     def _on_workspace_changed(self, index: int):
         if index >= 0:
