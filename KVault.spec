@@ -87,15 +87,22 @@ _OPTIONAL_PKGS = [
     "llama_cpp",
 ]
 
+import importlib.util as _ilu
+
 for _pkg in _OPTIONAL_PKGS:
+    # collect_all() 对不存在的包只返回空结果而不抛异常，因此必须先显式探测，
+    # 否则日志会谎报「已打包」而产物里其实没有。
+    if _ilu.find_spec(_pkg) is None:
+        print(f"[spec] optional package NOT installed, skipped: {_pkg}")
+        continue
     try:
         _d, _b, _h = collect_all(_pkg)
         all_datas += _d
         all_binaries += _b
         all_hidden += _h
-        print(f"[spec] bundled optional package: {_pkg}")
-    except Exception:
-        print(f"[spec] optional package not installed, skipped: {_pkg}")
+        print(f"[spec] bundled optional package: {_pkg} ({len(_b)} binaries)")
+    except Exception as _e:
+        print(f"[spec] failed to bundle optional package {_pkg}: {_e}")
 
 for _pkg in _collect_pkgs:
     try:
