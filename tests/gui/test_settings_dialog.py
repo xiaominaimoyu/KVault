@@ -46,9 +46,9 @@ def dialog() -> SettingsDialog:
     return SettingsDialog(_make_config())
 
 
-def test_construction_has_three_tabs(dialog):
+def test_construction_has_four_tabs(dialog):
     labels = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
-    assert labels == ["常规", "模型", "检索"]
+    assert labels == ["常规", "模型", "检索", "外观"]
 
 
 def test_general_tab_contains_data_dir_and_toggles(dialog):
@@ -193,3 +193,77 @@ def test_save_llama_cpp_values(monkeypatch):
     assert config.llama_cpp.model_path == "D:/models/other.gguf"
     assert config.llama_cpp.n_gpu_layers == 10
     assert config.llama_cpp.n_ctx == 4096
+
+
+# ---- 外观标签页 ----
+
+def test_appearance_tab_defaults(dialog):
+    assert len(dialog.accent_group.buttons()) == 6
+    assert dialog.bg_mode_combo.currentData() == "default"
+    assert dialog.bg_fit_combo.currentData() == "cover"
+    assert dialog.overlay_slider.value() == 35
+    assert dialog.surface_slider.value() == 88
+
+
+def test_appearance_tab_reflects_config():
+    from core.config import AppearanceConfig
+
+    config = _make_config()
+    config.appearance = AppearanceConfig(
+        accent_preset="rose",
+        background_mode="color",
+        background_color="#112233",
+    )
+    dialog = SettingsDialog(config)
+    assert dialog.appearance.accent_preset == "rose"
+    assert dialog.bg_mode_combo.currentData() == "color"
+
+
+def test_save_writes_appearance(monkeypatch):
+    monkeypatch.setattr(
+        "gui.dialogs.settings_dialog.QMessageBox.warning", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "gui.dialogs.settings_dialog.apply_theme", lambda *a, **k: "dark"
+    )
+    config = _make_config()
+    dialog = SettingsDialog(config)
+    dialog._on_accent_selected("rose")
+    dialog.appearance.background_color = "#112233"
+    dialog.bg_mode_combo.setCurrentIndex(dialog.bg_mode_combo.findData("color"))
+    dialog.overlay_slider.setValue(50)
+
+    dialog._on_save()
+
+    assert config.appearance.accent_preset == "rose"
+    assert config.appearance.background_mode == "color"
+    assert config.appearance.background_color == "#112233"
+    assert config.appearance.background_overlay == 0.5
+
+
+def test_accent_change_triggers_preview(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "gui.dialogs.settings_dialog.apply_theme",
+        lambda app, theme, appearance=None: calls.append(appearance),
+    )
+    dialog = SettingsDialog(_make_config())
+
+    dialog._on_accent_selected("indigo")
+
+    assert calls
+    assert calls[-1].accent_preset == "indigo"
+
+
+def test_reject_restores_original_appearance(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "gui.dialogs.settings_dialog.apply_theme",
+        lambda app, theme, appearance=None: calls.append(appearance),
+    )
+    dialog = SettingsDialog(_make_config())
+    dialog._on_accent_selected("violet")
+
+    dialog.reject()
+
+    assert calls[-1].accent_preset == "vault-teal"

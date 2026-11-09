@@ -8,6 +8,7 @@ from __future__ import annotations
 
 TOKENS_DARK: dict[str, str] = {
     "bg-vault": "#0F1115",
+    "bg-window": "#0F1115",
     "bg-surface": "#161922",
     "bg-raised": "#1E222C",
     "bg-inset": "#0C0E13",
@@ -18,6 +19,8 @@ TOKENS_DARK: dict[str, str] = {
     "accent-primary": "#2DD4BF",
     "accent-primary-dim": "#1A8B7E",
     "accent-primary-hover": "#3DEDCF",
+    "accent-rgb": "45, 212, 191",
+    "accent-fg": "#FFFFFF",
     "accent-warm": "#F5A623",
     "accent-warm-dim": "#B87714",
     "status-success": "#34D399",
@@ -28,6 +31,7 @@ TOKENS_DARK: dict[str, str] = {
 
 TOKENS_LIGHT: dict[str, str] = {
     "bg-vault": "#F7F8FA",
+    "bg-window": "#F7F8FA",
     "bg-surface": "#FFFFFF",
     "bg-raised": "#F1F3F5",
     "bg-inset": "#E8EBEE",
@@ -38,6 +42,8 @@ TOKENS_LIGHT: dict[str, str] = {
     "accent-primary": "#0D9488",
     "accent-primary-dim": "#5EEAD4",
     "accent-primary-hover": "#14B8A6",
+    "accent-rgb": "13, 148, 136",
+    "accent-fg": "#FFFFFF",
     "accent-warm": "#D97706",
     "accent-warm-dim": "#FDE68A",
     "status-success": "#059669",

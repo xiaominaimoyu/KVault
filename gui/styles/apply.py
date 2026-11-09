@@ -1,6 +1,7 @@
 """主题应用模块：加载 QSS 模板、插值 Token、应用到 QApplication。
 
-提供 apply_theme(app, theme) / resolve_system_theme() / interpolate(qss, tokens) 接口。
+提供 apply_theme(app, theme, appearance) / current_tokens() /
+resolve_system_theme() / interpolate(qss, tokens) 接口。
 """
 
 from __future__ import annotations
@@ -8,14 +9,18 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 
-from gui.styles.variables import TOKENS_DARK, TOKENS_LIGHT
+from core.config import AppearanceConfig
+from gui.styles.palettes import build_tokens
+from gui.styles.variables import TOKENS_DARK
 
 logger = logging.getLogger(__name__)
 
 _STYLES_DIR = Path(__file__).resolve().parent
 _QSS_CACHE: dict[str, str] = {}
+_CURRENT_TOKENS: dict[str, str] = dict(TOKENS_DARK)
 
 
 def _load_qss(theme: str) -> str:
@@ -43,6 +48,11 @@ def interpolate(qss_template: str, tokens: dict[str, str]) -> str:
     return qss_template % tokens
 
 
+def current_tokens() -> dict[str, str]:
+    """返回当前已应用主题的 Token 副本，供运行时取色。"""
+    return dict(_CURRENT_TOKENS)
+
+
 def resolve_system_theme() -> str:
     """检测操作系统暗色模式，返回 'dark' 或 'light'。
 
@@ -54,9 +64,9 @@ def resolve_system_theme() -> str:
         if app is None:
             return "dark"
         scheme = app.styleHints().colorScheme()
-        if scheme == QGuiApplication.ColorScheme.Light:
+        if scheme == Qt.ColorScheme.Light:
             return "light"
-        elif scheme == QGuiApplication.ColorScheme.Dark:
+        elif scheme == Qt.ColorScheme.Dark:
             return "dark"
         else:
             return "dark"
@@ -64,51 +74,51 @@ def resolve_system_theme() -> str:
         return "dark"
 
 
-def apply_theme(app: QGuiApplication, theme: str = "dark") -> str:
-    """应用指定主题到 QApplication。
+def _remember(tokens: dict[str, str]) -> None:
+    _CURRENT_TOKENS.clear()
+    _CURRENT_TOKENS.update(tokens)
+
+
+def _apply(app: QGuiApplication, theme: str, tokens: dict[str, str]) -> str:
+    """应用主题；失败时回退深色，并始终同步 current_tokens。"""
+    try:
+        qss = interpolate(_load_qss(theme), tokens)
+        app.setStyleSheet(qss)
+        _remember(tokens)
+        logger.info("theme applied: %s", theme)
+        return theme
+    except Exception as exc:
+        logger.warning(
+            "theme application failed for '%s': %s, falling back to dark", theme, exc
+        )
+
+    if theme != "dark":
+        return _apply(app, "dark", build_tokens("dark"))
+    app.setStyleSheet("")
+    _remember(dict(TOKENS_DARK))
+    return "dark"
+
+
+def apply_theme(
+    app: QGuiApplication,
+    theme: str = "dark",
+    appearance: AppearanceConfig | None = None,
+) -> str:
+    """应用指定主题与外观设置到 QApplication。
 
     Args:
         app: QApplication 实例。
         theme: 'dark' / 'light' / 'system'。
+        appearance: 外观配置；缺省使用默认预设与背景。
 
     Returns:
         实际应用的主题名（'dark' 或 'light'）。
     """
     if theme == "system":
-        resolved = resolve_system_theme()
-        return apply_theme(app, resolved)
+        return apply_theme(app, resolve_system_theme(), appearance)
 
     if theme not in ("dark", "light"):
         logger.warning("unknown theme '%s', falling back to dark", theme)
         theme = "dark"
 
-    tokens = TOKENS_DARK if theme == "dark" else TOKENS_LIGHT
-    qss_theme = theme
-
-    try:
-        qss_template = _load_qss(qss_theme)
-        qss = interpolate(qss_template, tokens)
-        app.setStyleSheet(qss)
-        logger.info("theme applied: %s", theme)
-        return theme
-    except FileNotFoundError:
-        logger.warning("QSS file for theme '%s' not found, falling back to dark", theme)
-        try:
-            qss_template = _load_qss("dark")
-            qss = interpolate(qss_template, TOKENS_DARK)
-            app.setStyleSheet(qss)
-            return "dark"
-        except Exception:
-            logger.error("even dark theme QSS failed, applying empty stylesheet")
-            app.setStyleSheet("")
-            return "dark"
-    except Exception as e:
-        logger.warning("theme application failed: %s, falling back to dark", e)
-        try:
-            qss_template = _load_qss("dark")
-            qss = interpolate(qss_template, TOKENS_DARK)
-            app.setStyleSheet(qss)
-            return "dark"
-        except Exception:
-            app.setStyleSheet("")
-            return "dark"
+    return _apply(app, theme, build_tokens(theme, appearance))

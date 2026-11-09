@@ -1,9 +1,13 @@
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
+
+
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 @dataclass
@@ -87,6 +91,55 @@ class LlamaCppConfig:
 
 
 @dataclass
+class AppearanceConfig:
+    """界面外观配置：强调色与页面背景。"""
+
+    accent_preset: str = "vault-teal"
+    accent_custom: str = ""
+    background_mode: str = "default"
+    background_color: str = "#0F1115"
+    background_image: str = ""
+    background_fit: str = "cover"
+    background_overlay: float = 0.35
+    surface_alpha: float = 0.88
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        if self.background_mode not in ("default", "color", "image"):
+            errors.append(
+                f"appearance.background_mode must be 'default', 'color' or 'image', got '{self.background_mode}'"
+            )
+        if self.background_fit not in ("cover", "contain", "tile"):
+            errors.append(
+                f"appearance.background_fit must be 'cover', 'contain' or 'tile', got '{self.background_fit}'"
+            )
+        if not _HEX_COLOR_RE.match(self.background_color):
+            errors.append(
+                f"appearance.background_color must be #RRGGBB, got '{self.background_color}'"
+            )
+        if self.accent_custom and not _HEX_COLOR_RE.match(self.accent_custom):
+            errors.append(
+                f"appearance.accent_custom must be #RRGGBB or empty, got '{self.accent_custom}'"
+            )
+        if not 0 <= self.background_overlay <= 1:
+            errors.append(
+                f"appearance.background_overlay must be between 0 and 1, got {self.background_overlay}"
+            )
+        if not 0 <= self.surface_alpha <= 1:
+            errors.append(
+                f"appearance.surface_alpha must be between 0 and 1, got {self.surface_alpha}"
+            )
+        if self.background_mode == "image":
+            if not self.background_image.strip():
+                errors.append("appearance.background_image must not be empty")
+            elif not Path(self.background_image).is_file():
+                errors.append(
+                    f"appearance.background_image not found: {self.background_image}"
+                )
+        return errors
+
+
+@dataclass
 class Config:
     files_dir: Path = Path("./data/files")
     chroma_dir: Path = Path("./data/chroma_db")
@@ -103,6 +156,7 @@ class Config:
     similarity_threshold: float = 0.5
     mcp_enabled: bool = False
     theme: str = "system"
+    appearance: AppearanceConfig = field(default_factory=AppearanceConfig)
     last_index_model: str | None = None
     last_index_dimension: int | None = None
     last_index_at: float | None = None
@@ -134,6 +188,7 @@ class Config:
             errors.append(f"top_k must be > 0, got {self.top_k}")
         errors.extend(self.hybrid_search.validate())
         errors.extend(self.workspaces.validate())
+        errors.extend(self.appearance.validate())
         if self.embedding_backend not in ("ollama", "llama_cpp"):
             errors.append(
                 f"embedding_backend must be 'ollama' or 'llama_cpp', got '{self.embedding_backend}'"
@@ -193,6 +248,13 @@ class Config:
         # Parse nested llama_cpp config
         if "llama_cpp" in data and isinstance(data["llama_cpp"], dict):
             data["llama_cpp"] = LlamaCppConfig(**data["llama_cpp"])
+
+        # Parse nested appearance config（旧配置缺少该段时保持默认）
+        if "appearance" in data and isinstance(data["appearance"], dict):
+            known = set(AppearanceConfig.__dataclass_fields__)
+            data["appearance"] = AppearanceConfig(
+                **{k: v for k, v in data["appearance"].items() if k in known}
+            )
 
         cfg = cls(**data)
         cfg.files_dir.mkdir(parents=True, exist_ok=True)

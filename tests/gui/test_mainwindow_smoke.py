@@ -24,9 +24,10 @@ def test_main_py_unchanged():
 
 
 def test_main_window_no_hardcoded_status_colors():
-    """main_window.py 中 _STATUS_COLORS 应引用 TOKENS_DARK 而非硬编码。"""
+    """状态色应来自 current_tokens() 而非硬编码。"""
     mw = (_REPO_ROOT / "gui" / "main_window.py").read_text(encoding="utf-8")
-    assert "TOKENS_DARK" in mw
+    assert "current_tokens()" in mw
+    assert "TOKENS_DARK" not in mw
     assert '"#2ecc71"' not in mw
     assert '"#e74c3c"' not in mw
     assert '"#f1c40f"' not in mw
@@ -35,9 +36,9 @@ def test_main_window_no_hardcoded_status_colors():
 
 
 def test_main_window_imports_token_system():
-    """main_window.py 应导入 TOKENS_DARK。"""
+    """main_window.py 应通过 current_tokens 获取当前主题。"""
     mw = (_REPO_ROOT / "gui" / "main_window.py").read_text(encoding="utf-8")
-    assert "from gui.styles.variables import TOKENS_DARK" in mw
+    assert "from gui.styles.apply import current_tokens" in mw
 
 
 def test_main_window_calls_apply_theme():
@@ -54,9 +55,10 @@ def test_startup_dialog_no_hardcoded_colors():
 
 
 def test_startup_dialog_uses_tokens():
-    """startup_dialog.py 应引用 TOKENS_DARK。"""
+    """startup_dialog.py 应通过 current_tokens 取色。"""
     sd = (_REPO_ROOT / "gui" / "startup_dialog.py").read_text(encoding="utf-8")
-    assert "TOKENS_DARK" in sd
+    assert "current_tokens()" in sd
+    assert "TOKENS_DARK" not in sd
 
 
 def test_main_window_no_plain_setstylesheet_with_colors():

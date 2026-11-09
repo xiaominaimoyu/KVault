@@ -1,12 +1,20 @@
 """分类标签页化设置对话框。
 
 常规（数据目录 / MCP / 混合检索）、模型（后端 / Ollama / llama.cpp）、
-检索（切分 / Top-K / 阈值）三个标签页。
+检索（切分 / Top-K / 阈值）、外观（配色 / 背景）四个标签页。
 """
 
 from __future__ import annotations
 
+import shutil
+import time
+from copy import deepcopy
+from pathlib import Path
+
 from PySide6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QColorDialog,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -17,14 +25,18 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSlider,
     QSpinBox,
     QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
+from PySide6.QtCore import Qt
 
-from gui.styles.variables import TOKENS_DARK
+from core.config import AppearanceConfig
+from gui.styles.apply import apply_theme, current_tokens
+from gui.styles.palettes import ACCENT_PRESETS, PRESET_ORDER
 
 
 class ModelSwitchDialog(QDialog):
@@ -90,8 +102,16 @@ class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.resize(480, 420)
+        self.resize(520, 520)
         self.config = config
+
+        original = getattr(config, "appearance", None)
+        self._original_appearance = (
+            deepcopy(original) if isinstance(original, AppearanceConfig)
+            else AppearanceConfig()
+        )
+        self._original_theme = getattr(config, "theme", "system")
+        self.appearance = deepcopy(self._original_appearance)
 
         self._model_manager = getattr(parent, "_model_manager", None) if parent else None
         self._rebuild_fn = getattr(parent, "_rebuild_all_fn", None) if parent else None
@@ -103,6 +123,10 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(self._build_general_tab(), "常规")
         self.tabs.addTab(self._build_model_tab(), "模型")
         self.tabs.addTab(self._build_retrieval_tab(), "检索")
+        self.tabs.addTab(self._build_appearance_tab(), "外观")
+
+        self.theme_combo.currentIndexChanged.connect(self._apply_preview)
+        self._sync_appearance_controls()
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_save)
@@ -232,6 +256,240 @@ class SettingsDialog(QDialog):
 
         return tab
 
+    def _build_appearance_tab(self) -> QWidget:
+        tab = QWidget()
+        self._appearance_tab = tab
+        layout = QVBoxLayout(tab)
+        form = QFormLayout()
+
+        presets_row = QWidget()
+        presets_layout = QHBoxLayout(presets_row)
+        presets_layout.setContentsMargins(0, 0, 0, 0)
+        presets_layout.setSpacing(6)
+        self.accent_group = QButtonGroup(self)
+        self.accent_group.setExclusive(True)
+        self.accent_buttons: dict[str, QPushButton] = {}
+        for key in PRESET_ORDER:
+            button = QPushButton(ACCENT_PRESETS[key]["label"])
+            button.setCheckable(True)
+            button.setProperty("accentKey", key)
+            button.clicked.connect(
+                lambda _checked=False, k=key: self._on_accent_selected(k)
+            )
+            self.accent_group.addButton(button)
+            self.accent_buttons[key] = button
+            presets_layout.addWidget(button)
+        form.addRow("配色方案", presets_row)
+
+        self.custom_accent_btn = QPushButton("自定义强调色...")
+        self.custom_accent_btn.clicked.connect(self._on_pick_custom_accent)
+        form.addRow("自定义", self.custom_accent_btn)
+
+        self.bg_mode_combo = QComboBox()
+        self.bg_mode_combo.addItem("默认（跟随主题）", "default")
+        self.bg_mode_combo.addItem("纯色背景", "color")
+        self.bg_mode_combo.addItem("图片背景", "image")
+        self.bg_mode_combo.currentIndexChanged.connect(self._on_background_mode_changed)
+        form.addRow("背景模式", self.bg_mode_combo)
+
+        self.bg_color_btn = QPushButton("#0F1115")
+        self.bg_color_btn.clicked.connect(self._on_pick_bg_color)
+        form.addRow("纯色", self.bg_color_btn)
+
+        image_row = QWidget()
+        image_layout = QHBoxLayout(image_row)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        self.bg_image_edit = QLineEdit()
+        self.bg_image_edit.setReadOnly(True)
+        image_layout.addWidget(self.bg_image_edit)
+        self.bg_image_browse_btn = QPushButton("浏览...")
+        self.bg_image_browse_btn.clicked.connect(self._on_pick_bg_image)
+        image_layout.addWidget(self.bg_image_browse_btn)
+        self.bg_image_clear_btn = QPushButton("清除")
+        self.bg_image_clear_btn.clicked.connect(self._on_clear_bg_image)
+        image_layout.addWidget(self.bg_image_clear_btn)
+        form.addRow("背景图片", image_row)
+
+        self.bg_fit_combo = QComboBox()
+        self.bg_fit_combo.addItem("裁剪填充（cover）", "cover")
+        self.bg_fit_combo.addItem("完整显示（contain）", "contain")
+        self.bg_fit_combo.addItem("平铺（tile）", "tile")
+        self.bg_fit_combo.currentIndexChanged.connect(self._sync_appearance_from_ui)
+        form.addRow("图片适配", self.bg_fit_combo)
+
+        self.overlay_slider = QSlider(Qt.Orientation.Horizontal)
+        self.overlay_slider.setRange(0, 90)
+        self.overlay_slider.valueChanged.connect(self._sync_appearance_from_ui)
+        form.addRow("暗色遮罩", self.overlay_slider)
+
+        self.surface_slider = QSlider(Qt.Orientation.Horizontal)
+        self.surface_slider.setRange(60, 100)
+        self.surface_slider.valueChanged.connect(self._sync_appearance_from_ui)
+        form.addRow("面板不透明度", self.surface_slider)
+
+        hint = QLabel("图片背景会自动复制到数据目录，切换主题或配色后仍然生效。")
+        hint.setWordWrap(True)
+        form.addRow("", hint)
+
+        layout.addLayout(form)
+        layout.addStretch(1)
+        return tab
+
+    # ---- 外观同步 ----
+
+    def _sync_appearance_controls(self) -> None:
+        """把 appearance 状态回填到控件。"""
+        self._syncing = True
+        self._set_combo_data(self.bg_mode_combo, self.appearance.background_mode)
+        self._set_combo_data(self.bg_fit_combo, self.appearance.background_fit)
+        self.bg_image_edit.setText(self.appearance.background_image)
+        self.overlay_slider.setValue(round(self.appearance.background_overlay * 100))
+        self.surface_slider.setValue(round(self.appearance.surface_alpha * 100))
+        self._refresh_accent_buttons()
+        self._refresh_custom_accent()
+        self._refresh_bg_color()
+        self._update_background_controls()
+        self._syncing = False
+
+    def _sync_appearance_from_ui(self) -> None:
+        """把控件值写回 appearance 并触发实时预览。"""
+        if getattr(self, "_syncing", False):
+            return
+        self.appearance.background_mode = self.bg_mode_combo.currentData()
+        self.appearance.background_fit = self.bg_fit_combo.currentData()
+        self.appearance.background_image = self.bg_image_edit.text().strip()
+        self.appearance.background_overlay = self.overlay_slider.value() / 100
+        self.appearance.surface_alpha = self.surface_slider.value() / 100
+        self._apply_preview()
+
+    def _apply_preview(self, *_args) -> None:
+        if getattr(self, "_syncing", False):
+            return
+        app = QApplication.instance()
+        if app is None:
+            return
+        apply_theme(app, self.theme_combo.currentData(), self.appearance)
+
+    @staticmethod
+    def _set_combo_data(combo: QComboBox, value: str) -> None:
+        index = combo.findData(value)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+
+    def _refresh_accent_buttons(self) -> None:
+        active = "" if self.appearance.accent_custom else self.appearance.accent_preset
+        for key, button in self.accent_buttons.items():
+            label = ACCENT_PRESETS[key]["label"]
+            button.setText(("● " if key == active else "○ ") + label)
+            button.setChecked(key == active)
+            button.setStyleSheet(f"color: {ACCENT_PRESETS[key]['dark']};")
+
+    def _refresh_custom_accent(self) -> None:
+        custom = self.appearance.accent_custom.strip()
+        self.custom_accent_btn.setText(
+            f"自定义强调色：{custom}" if custom else "自定义强调色..."
+        )
+
+    def _refresh_bg_color(self) -> None:
+        self.bg_color_btn.setText(self.appearance.background_color)
+
+    def _update_background_controls(self) -> None:
+        mode = self.bg_mode_combo.currentData()
+        self.bg_color_btn.setEnabled(mode == "color")
+        is_image = mode == "image"
+        self.bg_image_edit.setEnabled(is_image)
+        self.bg_image_browse_btn.setEnabled(is_image)
+        self.bg_image_clear_btn.setEnabled(is_image)
+        self.bg_fit_combo.setEnabled(is_image)
+        self.overlay_slider.setEnabled(is_image)
+        self.surface_slider.setEnabled(is_image)
+
+    # ---- 外观事件 ----
+
+    def _on_accent_selected(self, key: str) -> None:
+        self.appearance.accent_preset = key
+        self.appearance.accent_custom = ""
+        self._refresh_accent_buttons()
+        self._refresh_custom_accent()
+        self._apply_preview()
+
+    def _on_pick_custom_accent(self) -> None:
+        color = QColorDialog.getColor(
+            parent=self, title="选择强调色"
+        )
+        if color.isValid():
+            self.appearance.accent_custom = color.name().upper()
+            self._refresh_accent_buttons()
+            self._refresh_custom_accent()
+            self._apply_preview()
+
+    def _on_background_mode_changed(self) -> None:
+        self._update_background_controls()
+        self._sync_appearance_from_ui()
+
+    def _on_pick_bg_color(self) -> None:
+        color = QColorDialog.getColor(parent=self, title="选择背景色")
+        if color.isValid():
+            self.appearance.background_color = color.name().upper()
+            self._refresh_bg_color()
+            self._apply_preview()
+
+    def _on_pick_bg_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择背景图片",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.webp);;All Files (*.*)",
+        )
+        if path:
+            self.bg_image_edit.setText(path)
+            self._sync_appearance_from_ui()
+
+    def _on_clear_bg_image(self) -> None:
+        self.bg_image_edit.clear()
+        self._sync_appearance_from_ui()
+
+    def reject(self) -> None:
+        """取消时恢复保存前的外观，避免预览残留。"""
+        self.appearance = deepcopy(self._original_appearance)
+        index = self.theme_combo.findData(self._original_theme)
+        if index >= 0:
+            self.theme_combo.blockSignals(True)
+            self.theme_combo.setCurrentIndex(index)
+            self.theme_combo.blockSignals(False)
+        self._apply_preview()
+        super().reject()
+
+    def _prepare_background_image(self, path: str) -> str:
+        """把外部图片复制到数据目录，返回最终路径。"""
+        if self.appearance.background_mode != "image" or not path:
+            return path
+        source = Path(path)
+        target_dir = Path(self.config.files_dir).parent / "backgrounds"
+        try:
+            if source.resolve().parent == target_dir.resolve():
+                return str(source)
+        except OSError:
+            return path
+
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target = target_dir / (
+                f"bg_{int(time.time() * 1000)}{source.suffix.lower() or '.png'}"
+            )
+            shutil.copy2(source, target)
+        except OSError:
+            return path
+
+        old = self._original_appearance.background_image
+        if old and Path(old) != target:
+            try:
+                if Path(old).resolve().parent == target_dir.resolve():
+                    Path(old).unlink(missing_ok=True)
+            except OSError:
+                pass
+        return str(target)
+
     # ---- 事件处理 ----
 
     def _on_switch_model(self):
@@ -253,26 +511,27 @@ class SettingsDialog(QDialog):
         if backend == "llama_cpp":
             from core.embedding_backends.llama_cpp_backend import LlamaCppBackend
 
+            tokens = current_tokens()
             tmp = LlamaCppBackend(model_path=self.gguf_path.text().strip())
             if tmp.is_available() and tmp.is_model_available():
                 self.backend_status_label.setText("✓ llama.cpp 后端就绪")
                 self.backend_status_label.setStyleSheet(
-                    f"color: {TOKENS_DARK['status-success']};"
+                    f"color: {tokens['status-success']};"
                 )
             elif not tmp.is_available():
                 self.backend_status_label.setText("✗ 未安装 llama-cpp-python")
                 self.backend_status_label.setStyleSheet(
-                    f"color: {TOKENS_DARK['status-error']};"
+                    f"color: {tokens['status-error']};"
                 )
             else:
                 self.backend_status_label.setText("✗ GGUF 模型文件不存在")
                 self.backend_status_label.setStyleSheet(
-                    f"color: {TOKENS_DARK['status-error']};"
+                    f"color: {tokens['status-error']};"
                 )
         else:
             self.backend_status_label.setText("Ollama 后端（需启动 Ollama 服务）")
             self.backend_status_label.setStyleSheet(
-                f"color: {TOKENS_DARK['fg-muted']};"
+                f"color: {current_tokens()['fg-muted']};"
             )
 
     def _on_mcp_toggled(self, checked: bool):
@@ -304,6 +563,12 @@ class SettingsDialog(QDialog):
         self.config.mcp_enabled = self.mcp_enabled.isChecked()
         self.config.hybrid_search.enabled = self.hybrid_enabled.isChecked()
         self.config.theme = self.theme_combo.currentData()
+
+        self._sync_appearance_from_ui()
+        self.appearance.background_image = self._prepare_background_image(
+            self.appearance.background_image
+        )
+        self.config.appearance = self.appearance
 
         errors = self.config.validate()
         if errors:

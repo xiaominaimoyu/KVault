@@ -17,6 +17,8 @@ class IngestWorker(QThread):
         success = 0
         fail = 0
         for i, path in enumerate(self.file_paths, start=1):
+            if self.isInterruptionRequested():
+                break
             file_name = os.path.basename(path)
             self.progress.emit(int(i / total * 100), file_name)
             try:

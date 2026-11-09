@@ -1,5 +1,6 @@
 import html
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Qt, Signal
@@ -46,7 +47,8 @@ from gui.panels.doc_list_panel import (
 from gui.panels.nav_panel import NavPanel
 from gui.panels.status_bar import StatusBar
 from gui.panels.top_nav_bar import TopNavBar
-from gui.styles.variables import TOKENS_DARK
+from gui.styles.apply import current_tokens
+from gui.widgets.background import BackgroundWidget
 from gui.workers.ingest_worker import IngestWorker
 from gui.workers.search_worker import SearchWorker
 
@@ -72,6 +74,8 @@ class ReindexWorker(QThread):
         success = 0
         fail = 0
         for i, doc_id in enumerate(self.doc_ids, start=1):
+            if self.isInterruptionRequested():
+                break
             self.progress.emit(int(i / total * 100), doc_id)
             try:
                 new_id = self.reindex_fn(doc_id)
@@ -191,7 +195,7 @@ class MainWindow(QMainWindow):
         self._check_environment()
 
     def _apply_theme(self, theme: str) -> str:
-        """应用主题到 QApplication（dark / light / system）。"""
+        """应用主题与外观到 QApplication（dark / light / system）。"""
         from PySide6.QtWidgets import QApplication
 
         from gui.styles.apply import apply_theme
@@ -199,7 +203,24 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is None:
             return "dark"
-        return apply_theme(app, theme)
+        applied = apply_theme(app, theme, getattr(self.config, "appearance", None))
+        self._update_background()
+        return applied
+
+    def _update_background(self) -> None:
+        """把当前外观同步到背景绘制层。"""
+        if not hasattr(self, "background_widget"):
+            return
+        appearance = getattr(self.config, "appearance", None)
+        mode = getattr(appearance, "background_mode", "default")
+        tokens = current_tokens()
+        self.background_widget.set_appearance(
+            mode=mode,
+            color=tokens.get("bg-window", tokens["bg-vault"]),
+            image_path=getattr(appearance, "background_image", ""),
+            fit=getattr(appearance, "background_fit", "cover"),
+            overlay=getattr(appearance, "background_overlay", 0.0),
+        )
 
     def _setup_shortcuts(self):
         """注册全局键盘快捷键（设计规范 5.6）。"""
@@ -237,8 +258,10 @@ class MainWindow(QMainWindow):
     def _setup_central_layout(self):
         self.status_bar = StatusBar()
 
+        self.background_widget = BackgroundWidget()
+        self._update_background()
 
-        container = QWidget()
+        container = self.background_widget
         main_layout = QVBoxLayout(container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
@@ -449,7 +472,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "导入失败", f"{file_name}\n{error}")
             self.status_bar.show_message(f"导入失败: {file_name}")
             logger.error("导入失败: %s - %s", file_name, error)
-        self._reload_all()
 
     def _on_ingest_finished(self, success_count: int, fail_count: int):
         self.progress_bar.setVisible(False)
@@ -457,6 +479,7 @@ class MainWindow(QMainWindow):
         if fail_count:
             msg += f", 失败 {fail_count} 个"
         self.status_bar.show_message(msg)
+        self._reload_all()
         self._check_environment()
 
     def _reload_document_list(self):
@@ -626,8 +649,11 @@ class MainWindow(QMainWindow):
     def _load_preview_with_chunk(self, doc_id: str, chunk_index: int):
         self._load_preview(doc_id)
         chunks = self.metadata.get_document_chunks(doc_id)
-        if 0 <= chunk_index < len(chunks):
-            preview = _esc(chunks[chunk_index]["content_preview"])
+        chunk = next(
+            (c for c in chunks if c.get("chunk_index") == chunk_index), None
+        )
+        if chunk is not None:
+            preview = _esc(chunk["content_preview"])
             self.detail_panel.preview_tab.append_hit_chunk(
                 f"<h3>检索命中块 {chunk_index + 1}</h3>"
                 f"<p>{preview}</p>"
@@ -663,7 +689,7 @@ class MainWindow(QMainWindow):
             if doc and doc.status == "failed":
                 error_action = QAction("查看错误详情", self)
                 error_action.triggered.connect(lambda: QMessageBox.critical(
-                    self, "错误详情", _esc(doc.error_message or "未知错误")
+                    self, "错误详情", doc.error_message or "未知错误"
                 ))
                 menu.addAction(error_action)
 
@@ -747,7 +773,6 @@ class MainWindow(QMainWindow):
         doc = self.metadata.get_document(doc_id)
         if not doc:
             raise ValueError("文档不存在")
-        self.metadata.delete_document(doc_id, delete_file=False)
         return self._ingest_with_partition(doc.original_path or doc.stored_path, doc.partition_id or DEFAULT_PARTITION_ID)
 
     def _on_reindex_file_done(self, doc_id: str, success: bool, original_id: str, error: str):
@@ -797,10 +822,14 @@ class MainWindow(QMainWindow):
     def _open_settings(self):
         old_backend = self.config.embedding_backend
         old_theme = getattr(self.config, "theme", "dark")
+        old_appearance = deepcopy(getattr(self.config, "appearance", None))
         dialog = SettingsDialog(self.config, self)
         if dialog.exec() == QDialog.Accepted:
-            # 主题运行时切换（无需重启）
-            if self.config.theme != old_theme:
+            # 主题 / 外观运行时切换（无需重启）
+            if (
+                self.config.theme != old_theme
+                or getattr(self.config, "appearance", None) != old_appearance
+            ):
                 self._apply_theme(self.config.theme)
             self.splitter = KnowledgeTextSplitter(
                 chunk_size=self.config.chunk_size,
@@ -831,11 +860,12 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.resolve())))
 
     def _score_color(self, score: float) -> str:
+        tokens = current_tokens()
         if score >= 0.8:
-            return TOKENS_DARK["status-success"]
+            return tokens["status-success"]
         if score >= 0.5:
-            return TOKENS_DARK["status-warning"]
-        return TOKENS_DARK["status-error"]
+            return tokens["status-warning"]
+        return tokens["status-error"]
 
     def _reload_workspace_combo(self):
         workspaces = [
@@ -883,6 +913,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self._workspace_manager.delete(ws_id, archive=True)
+            self._rebuild_services_for_workspace()
             self._reload_workspace_combo()
             self._reload_all()
             self.status_bar.show_message(f"已归档工作区: {ws_id}", 3000)
@@ -903,13 +934,25 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event):
-        if self._ingest_worker and self._ingest_worker.isRunning():
-            self._ingest_worker.quit()
-            self._ingest_worker.wait(3000)
-        if self._search_worker and self._search_worker.isRunning():
-            self._search_worker.quit()
-            self._search_worker.wait(3000)
-        if self._reindex_worker and self._reindex_worker.isRunning():
-            self._reindex_worker.quit()
-            self._reindex_worker.wait(3000)
+        workers = [
+            worker
+            for worker in (
+                self._ingest_worker,
+                self._search_worker,
+                self._reindex_worker,
+            )
+            if worker is not None and worker.isRunning()
+        ]
+        for worker in workers:
+            worker.requestInterruption()
+        for worker in workers:
+            worker.wait(3000)
+
+        if any(worker.isRunning() for worker in workers):
+            QMessageBox.information(
+                self, "正在收尾", "后台任务仍在结束，请稍后再关闭窗口。"
+            )
+            event.ignore()
+            return
+
         event.accept()

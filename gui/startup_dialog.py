@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.startup_check import CheckResult
-from gui.styles.variables import TOKENS_DARK
+from gui.styles.apply import current_tokens
 
 
 class StartupDialog(QDialog):
@@ -36,6 +36,7 @@ class StartupDialog(QDialog):
         content_layout.setSpacing(8)
 
         has_error = False
+        tokens = current_tokens()
         for result in self.results:
             row = QFrame()
             row.setProperty("panelType", "card")
@@ -47,13 +48,13 @@ class StartupDialog(QDialog):
             if result.passed:
                 status_icon.setText("✓")
                 status_icon.setStyleSheet(
-                    f"font-size: 18px; color: {TOKENS_DARK['status-success']}; font-weight: bold;"
+                    f"font-size: 18px; color: {tokens['status-success']}; font-weight: bold;"
                 )
             else:
                 has_error = True
                 status_icon.setText("✗")
                 status_icon.setStyleSheet(
-                    f"font-size: 18px; color: {TOKENS_DARK['status-error']}; font-weight: bold;"
+                    f"font-size: 18px; color: {tokens['status-error']}; font-weight: bold;"
                 )
             header.addWidget(status_icon)
             header.addWidget(QLabel(f"<b>{result.name}</b>"))
@@ -61,13 +62,13 @@ class StartupDialog(QDialog):
             row_layout.addLayout(header)
 
             msg_label = QLabel(result.message)
-            msg_label.setStyleSheet(f"color: {TOKENS_DARK['fg-secondary']};")
+            msg_label.setStyleSheet(f"color: {tokens['fg-secondary']};")
             row_layout.addWidget(msg_label)
 
             if result.suggestion:
                 suggest_label = QLabel(f"<i>{result.suggestion}</i>")
                 suggest_label.setStyleSheet(
-                    f"color: {TOKENS_DARK['fg-muted']}; font-size: 13px;"
+                    f"color: {tokens['fg-muted']}; font-size: 13px;"
                 )
                 row_layout.addWidget(suggest_label)
 

@@ -9,18 +9,22 @@ from PySide6.QtCore import Property, QPropertyAnimation, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
 
-from gui.styles.variables import TOKENS_DARK
+from gui.styles.apply import current_tokens
 
-_STATUS_COLOR_MAP = {
-    "indexed": TOKENS_DARK["status-success"],
-    "success": TOKENS_DARK["status-success"],
-    "indexing": TOKENS_DARK["status-warning"],
-    "warning": TOKENS_DARK["status-warning"],
-    "pending": TOKENS_DARK["fg-muted"],
-    "failed": TOKENS_DARK["status-error"],
-    "error": TOKENS_DARK["status-error"],
-    "info": TOKENS_DARK["status-info"],
-}
+
+def _status_colors() -> dict[str, str]:
+    """按当前主题返回状态色映射。"""
+    tokens = current_tokens()
+    return {
+        "indexed": tokens["status-success"],
+        "success": tokens["status-success"],
+        "indexing": tokens["status-warning"],
+        "warning": tokens["status-warning"],
+        "pending": tokens["fg-muted"],
+        "failed": tokens["status-error"],
+        "error": tokens["status-error"],
+        "info": tokens["status-info"],
+    }
 
 
 class StatusDot(QWidget):
@@ -77,7 +81,8 @@ class StatusDot(QWidget):
         self.update()
 
     def get_color(self) -> QColor:
-        color_str = _STATUS_COLOR_MAP.get(self._status, TOKENS_DARK["fg-muted"])
+        colors = _status_colors()
+        color_str = colors.get(self._status, colors["pending"])
         return QColor(color_str)
 
     def paintEvent(self, event):

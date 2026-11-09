@@ -14,7 +14,7 @@ def _make_config():
 def test_top_nav_bar_construction():
     config = _make_config()
     nav = TopNavBar(config)
-    assert nav.height() == 56
+    assert nav.height() == 60
     assert nav.objectName() == "TopNavBar"
 
 

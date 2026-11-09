@@ -4,7 +4,7 @@
 
 /* === 全局 === */
 QMainWindow {
-    background-color: %(bg-vault)s;
+    background-color: %(bg-window)s;
 }
 
 QWidget {
@@ -24,11 +24,11 @@ QPushButton {
     background-color: %(bg-raised)s;
     color: %(fg-primary)s;
     border: 1px solid %(fg-faint)s;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 6px 16px;
     font-size: 14px;
     font-weight: 500;
-    min-height: 32px;
+    min-height: 34px;
 }
 QPushButton:hover {
     background-color: %(bg-surface)s;
@@ -43,13 +43,17 @@ QPushButton:disabled {
     border: 1px solid %(fg-faint)s;
 }
 QPushButton[btnType="primary"] {
-    background-color: %(accent-primary)s;
-    color: #FFFFFF;
+    background-color: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 %(accent-primary-hover)s,
+        stop: 1 %(accent-primary)s
+    );
+    color: %(accent-fg)s;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     padding: 6px 16px;
-    font-weight: 500;
-    min-height: 32px;
+    font-weight: 600;
+    min-height: 34px;
 }
 QPushButton[btnType="primary"]:hover {
     background-color: %(accent-primary-hover)s;
@@ -65,7 +69,7 @@ QPushButton[btnType="secondary"] {
     background-color: %(bg-raised)s;
     color: %(fg-primary)s;
     border: 1px solid %(fg-faint)s;
-    border-radius: 6px;
+    border-radius: 8px;
 }
 QPushButton[btnType="icon"] {
     background-color: transparent;
@@ -87,7 +91,7 @@ QPushButton[btnType="danger"] {
     background-color: %(status-error)s;
     color: #FFFFFF;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
 }
 
 /* === 输入框 === */
@@ -95,12 +99,12 @@ QLineEdit {
     background-color: %(bg-inset)s;
     color: %(fg-primary)s;
     border: 1px solid %(fg-faint)s;
-    border-radius: 4px;
-    padding: 6px 10px;
-    min-height: 32px;
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-height: 34px;
     font-size: 14px;
     selection-background-color: %(accent-primary-dim)s;
-    selection-color: #FFFFFF;
+    selection-color: %(accent-fg)s;
 }
 QLineEdit:focus {
     border: 1px solid %(accent-primary)s;
@@ -115,9 +119,9 @@ QComboBox {
     background-color: %(bg-inset)s;
     color: %(fg-primary)s;
     border: 1px solid %(fg-faint)s;
-    border-radius: 4px;
-    padding: 6px 10px;
-    min-height: 32px;
+    border-radius: 8px;
+    padding: 6px 12px;
+    min-height: 34px;
     font-size: 14px;
 }
 QComboBox:hover {
@@ -140,7 +144,7 @@ QComboBox QAbstractItemView {
     border: 1px solid %(fg-faint)s;
     border-radius: 6px;
     selection-background-color: %(accent-primary-dim)s;
-    selection-color: #FFFFFF;
+    selection-color: %(accent-fg)s;
     outline: none;
     padding: 4px;
 }
@@ -162,7 +166,7 @@ QTableWidget::item:hover {
     background-color: %(bg-raised)s;
 }
 QTableWidget::item:selected {
-    background-color: rgba(45, 212, 191, 0.15);
+    background-color: rgba(%(accent-rgb)s, 0.16);
     border-left: 3px solid %(accent-primary)s;
     color: %(fg-primary)s;
 }
@@ -203,7 +207,7 @@ QTreeWidget::item:hover {
     background-color: %(bg-raised)s;
 }
 QTreeWidget::item:selected {
-    background-color: rgba(45, 212, 191, 0.15);
+    background-color: rgba(%(accent-rgb)s, 0.16);
     border-left: 3px solid %(accent-primary)s;
     color: %(fg-primary)s;
 }
@@ -240,7 +244,7 @@ QListWidget::item:hover {
     background-color: %(bg-raised)s;
 }
 QListWidget::item:selected {
-    background-color: rgba(45, 212, 191, 0.15);
+    background-color: rgba(%(accent-rgb)s, 0.16);
     border-left: 3px solid %(accent-primary)s;
     color: %(fg-primary)s;
 }
@@ -300,7 +304,7 @@ QMenu::item {
 }
 QMenu::item:selected {
     background-color: %(accent-primary-dim)s;
-    color: #FFFFFF;
+    color: %(accent-fg)s;
 }
 QMenu::separator {
     height: 1px;
@@ -316,12 +320,12 @@ QMenu::item[danger="true"]:selected {
 QScrollBar:vertical {
     background-color: transparent;
     border: none;
-    width: 8px;
+    width: 6px;
     margin: 0px;
 }
 QScrollBar::handle:vertical {
     background-color: %(fg-faint)s;
-    border-radius: 4px;
+    border-radius: 3px;
     min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
@@ -337,12 +341,12 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
 QScrollBar:horizontal {
     background-color: transparent;
     border: none;
-    height: 8px;
+    height: 6px;
     margin: 0px;
 }
 QScrollBar::handle:horizontal {
     background-color: %(fg-faint)s;
-    border-radius: 4px;
+    border-radius: 3px;
     min-width: 30px;
 }
 QScrollBar::handle:horizontal:hover {
@@ -362,9 +366,42 @@ QWidget#NavPanel {
     border-right: 1px solid %(fg-faint)s;
 }
 QLabel#PanelSectionTitle {
-    color: %(fg-secondary)s;
-    font-size: 13px;
-    font-weight: 500;
+    color: %(fg-muted)s;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* === 顶栏 === */
+QWidget#TopNavBar {
+    background-color: %(bg-surface)s;
+    border: none;
+    border-bottom: 1px solid %(fg-faint)s;
+}
+QLabel#LogoMark {
+    background-color: %(accent-primary)s;
+    color: %(accent-fg)s;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 700;
+}
+QLabel#AppTitle {
+    color: %(fg-primary)s;
+    font-size: 15px;
+    font-weight: 600;
+}
+QLabel#WorkspaceHint {
+    color: %(fg-muted)s;
+    font-size: 12px;
+}
+
+/* === 状态栏 === */
+QWidget#StatusBar {
+    background-color: %(bg-surface)s;
+    border-top: 1px solid %(fg-faint)s;
+}
+QLabel#StatusBarText {
+    color: %(fg-muted)s;
+    font-size: 12px;
 }
 
 /* === 格式徽章 === */
@@ -395,7 +432,7 @@ QListWidget#TagPillList::item:hover {
     background-color: %(bg-raised)s;
 }
 QListWidget#TagPillList::item:selected {
-    background-color: rgba(45, 212, 191, 0.15);
+    background-color: rgba(%(accent-rgb)s, 0.16);
     color: %(accent-primary)s;
     border: 1px solid %(accent-primary)s;
 }
@@ -429,7 +466,7 @@ QSplitter::handle:vertical {
 
 /* === 对话框 === */
 QDialog {
-    background-color: %(bg-surface)s;
+    background-color: %(bg-window)s;
     color: %(fg-primary)s;
 }
 
@@ -575,7 +612,7 @@ QPushButton#FloatingActionButton:pressed {
 
 /* === 拖拽导入遮罩 === */
 QLabel#DropOverlay {
-    background-color: rgba(45, 212, 191, 0.12);
+    background-color: rgba(%(accent-rgb)s, 0.12);
     border: 2px dashed %(accent-primary)s;
     border-radius: 8px;
     color: %(accent-primary)s;
@@ -597,14 +634,14 @@ QListWidget#DocGridList::item:selected {
 QFrame#DocCard {
     background-color: %(bg-surface)s;
     border: 1px solid %(fg-faint)s;
-    border-radius: 8px;
+    border-radius: 10px;
 }
 QFrame#DocCard:hover {
     border: 1px solid %(fg-muted)s;
 }
 QFrame#DocCard[selected="true"] {
     border: 1px solid %(accent-primary)s;
-    background-color: rgba(45, 212, 191, 0.06);
+    background-color: rgba(%(accent-rgb)s, 0.07);
 }
 QLabel#DocCardName {
     color: %(fg-primary)s;
@@ -632,10 +669,10 @@ QLabel#EmptyStateSubtitle {
 }
 QPushButton#EmptyStateCta {
     background-color: %(accent-primary)s;
-    color: %(bg-vault)s;
+    color: %(accent-fg)s;
     border: none;
-    border-radius: 6px;
-    padding: 8px 20px;
+    border-radius: 8px;
+    padding: 9px 22px;
     font-size: 14px;
     font-weight: 500;
     margin-top: 8px;

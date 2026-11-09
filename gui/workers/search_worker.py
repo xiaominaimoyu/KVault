@@ -19,6 +19,7 @@ class SearchWorker(QThread):
             results: list[SearchResult] = self.retriever.search(
                 self.query, top_k=self.top_k, filters=self.filters
             )
-            self.results.emit(results)
+            if not self.isInterruptionRequested():
+                self.results.emit(results)
         except Exception as e:
             self.error.emit(str(e))

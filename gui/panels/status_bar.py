@@ -44,11 +44,11 @@ class StatusBar(QWidget):
         layout.addWidget(self._status_dot)
 
         self._status_label = QLabel("就绪")
-        self._status_label.setStyleSheet("font-size: 13px;")
+        self._status_label.setObjectName("StatusBarText")
         layout.addWidget(self._status_label)
 
         self._stats_label = QLabel("")
-        self._stats_label.setStyleSheet("font-size: 11px;")
+        self._stats_label.setObjectName("StatusBarText")
         self._stats_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(self._stats_label)
 
@@ -61,7 +61,7 @@ class StatusBar(QWidget):
         layout.addWidget(self._ollama_dot)
 
         self._ollama_label = QLabel("Ollama")
-        self._ollama_label.setStyleSheet("font-size: 11px;")
+        self._ollama_label.setObjectName("StatusBarText")
         layout.addWidget(self._ollama_label)
 
     def set_status(self, text: str, color_key: str = "pending"):

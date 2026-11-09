@@ -64,3 +64,10 @@ def test_no_hardcoded_hex_colors():
             assert any(ph in stripped for ph in placeholders), (
                 f"Line {i+1}: hardcoded color '{hex_val}' without placeholder: {stripped}"
             )
+
+
+def test_no_hardcoded_accent_rgba():
+    """强调色半透明值必须走 accent-rgb Token，否则自定义配色会失效。"""
+    qss = _load_qss()
+    assert "rgba(45, 212, 191" not in qss
+    assert "rgba(%(accent-rgb)s" in qss

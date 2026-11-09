@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -43,21 +43,23 @@ class TopNavBar(QWidget):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.config = config
-        self.setFixedHeight(56)
+        self.setFixedHeight(60)
         self.setObjectName("TopNavBar")
         self._init_ui()
 
     def _init_ui(self):
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setContentsMargins(20, 0, 20, 0)
         layout.setSpacing(12)
 
-        logo_label = QLabel("▣")
-        logo_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        logo_label = QLabel("K")
+        logo_label.setObjectName("LogoMark")
+        logo_label.setFixedSize(28, 28)
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(logo_label)
 
         title_label = QLabel("KVault")
-        title_label.setStyleSheet("font-size: 15px; font-weight: 600;")
+        title_label.setObjectName("AppTitle")
         layout.addWidget(title_label)
 
         self._search_box = QLineEdit()
