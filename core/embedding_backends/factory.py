@@ -5,6 +5,7 @@ from __future__ import annotations
 from core.config import Config
 from core.embedding_backends.base import BaseEmbeddingBackend
 from core.embedding_backends.llama_cpp_backend import LlamaCppBackend
+from core.embedding_backends.llama_server_backend import LlamaServerBackend
 from core.embedding_backends.ollama_backend import OllamaBackend
 
 
@@ -26,6 +27,13 @@ class BackendFactory:
                 n_gpu_layers=config.llama_cpp.n_gpu_layers,
                 n_ctx=config.llama_cpp.n_ctx,
                 embedding_dim=config.llama_cpp.embedding_dim,
+                batch_size=config.embedding_batch_size,
+            )
+        elif backend == "llama_cpp_server":
+            return LlamaServerBackend(
+                base_url=config.llama_server.base_url,
+                model=config.llama_server.model,
+                timeout=config.llama_server.timeout,
                 batch_size=config.embedding_batch_size,
             )
         else:

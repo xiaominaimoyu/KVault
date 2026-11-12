@@ -57,7 +57,7 @@ KVault 采用四层架构：
 ### RAG 流水线
 
 ```
-文档导入 → 解析文本 → 切分块 → Embedding (Ollama) → ChromaDB 存储 → 语义检索
+文档导入 → 解析文本 → 切分块 → Embedding (Ollama / llama.cpp 服务) → ChromaDB 存储 → 语义检索
 ```
 
 ### 两种视图
@@ -116,11 +116,22 @@ KVault 的主界面有两个并列的视图，分工明确：
    pip install -r requirements.txt
    ```
 
-4. 确保已安装并启动 [Ollama](https://ollama.com)，且本地已拉取嵌入模型：
+4. 配置嵌入后端（二选一）：
+
+   **方式 A：Ollama**（默认后端）
 
    ```bash
    ollama pull modelscope.cn/Embedding-GGUF/bge-large-zh-v1.5:latest
    ```
+
+   **方式 B：llama.cpp 服务**（机器上已有 llama-server 时，无需 Ollama）
+
+   ```powershell
+   llama-server -m D:\AI\Models\llama.cpp\bge-m3-Q8_0.gguf --embedding --host 127.0.0.1 --port 8001
+   ```
+
+   然后在「设置 → 模型 → 嵌入后端」选择 **llama.cpp 服务**，填写 Base URL
+   （如 `http://127.0.0.1:8001`）与模型别名（留空则自动使用服务加载的模型）。
 
 ### 可选依赖
 
@@ -475,16 +486,36 @@ KVault/
 pyinstaller KVault.spec
 ```
 
-打包后的可执行文件位于 `dist/KVault/KVault.exe`。
+打包产物位于 `dist/KVault/`，其中：
+
+```text
+dist/KVault/
+├── KVault.exe      # 启动器，仅负责加载运行时
+└── _internal/      # Python 运行时 + 全部依赖（Qt、ChromaDB、PyMuPDF…）
+```
+
+> **`KVault.exe` 不能单独拷贝或分发。** 它是 onedir 模式的启动器，必须与同级
+> `_internal/` 目录一起使用。只把 exe 拿出来双击会弹出
+> `Failed to load Python DLL ...\_internal\python314.dll. LoadLibrary: 找不到指定的模块`，
+> 因为 exe 内的 bootloader 在启动阶段（Python 尚未运行）就找不到运行时 DLL，
+> 应用层无法捕获或降级。
+
+分发时请把整个目录打成压缩包：
+
+```powershell
+Compress-Archive -Path dist\KVault\* -DestinationPath dist\KVault-Windows-x64.zip -Force
+```
+
+用户下载后解压整个目录，再双击 `KVault.exe` 即可。
 
 ---
 
 ## 注意事项
 
 - 首次导入文档时会根据文件大小生成嵌入，可能需要一定时间。
-- 嵌入服务依赖本地 Ollama，请确保 Ollama 服务已启动且模型已下载。
+- 嵌入服务支持 Ollama 或 llama.cpp（进程内 / 已启动的 llama-server），请在设置中确认后端与服务状态。
 - `data/` 目录为运行时数据目录，建议定期备份。
-- 在打包环境中，用户数据存储在 `%APPDATA%\KVault` 目录。
+- 在打包环境中，用户数据存储在 `%APPDATA%\KVault` 目录，配置文件位于 exe 同目录。
 - 关闭窗口时会自动终止所有后台工作线程，确保数据安全。
 - 更换 Embedding 模型前，请先阅读 `docs/backup-and-migration.md` 中的「模型变更处理」章节，避免向量不兼容导致检索异常。
 

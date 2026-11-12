@@ -462,6 +462,12 @@ class MainWindow(QMainWindow):
         self.progress_bar = self.status_bar._progress_bar
         self.status_bar.show_message("本地运行 · 就绪")
 
+    def _backend_display_label(self) -> str:
+        """状态栏后端名：llama.cpp 系列统一显示 llama.cpp，避免误提示启动 Ollama。"""
+        if self.capabilities.backend_type in ("llama_cpp", "llama_cpp_server"):
+            return "llama.cpp"
+        return "Ollama"
+
     def _check_environment(self):
         """根据运行时能力刷新状态提示。
 
@@ -473,11 +479,11 @@ class MainWindow(QMainWindow):
             return
 
         if not self.embedder.is_model_available():
-            self.status_bar.show_message(f"模型未就绪: {self.config.embedding_model}")
-            logger.warning("模型不可用: %s", self.config.embedding_model)
+            self.status_bar.show_message(f"模型未就绪: {self.embedder.model_name}")
+            logger.warning("模型不可用: %s", self.embedder.model_name)
         else:
             self.status_bar.show_message("本地运行 · 就绪")
-            self.status_bar.set_ollama_status(True)
+            self.status_bar.set_ollama_status(True, self._backend_display_label())
 
     def _apply_degraded_mode(self) -> None:
         """进入受限模式：禁用依赖嵌入的功能，并提供配置指引。"""
@@ -486,11 +492,10 @@ class MainWindow(QMainWindow):
         for reason in caps.reasons:
             logger.warning("  - %s", reason)
 
-        # 后端名如实反映配置：选 llama.cpp 时显示「模型」，
+        # 后端名如实反映配置：llama.cpp 系列显示「llama.cpp」，
         # 否则显示「Ollama ✗」会让用户误以为需要启动 Ollama。
-        self.status_bar.set_backend_label(
-            "llama.cpp" if caps.backend_type == "llama_cpp" else "Ollama"
-        )
+        label = self._backend_display_label()
+        self.status_bar.set_backend_label(label)
 
         # 依赖嵌入模型的入口一律禁用，而不是让用户点了之后报错
         self.top_nav_bar.set_import_enabled(False)
@@ -499,7 +504,7 @@ class MainWindow(QMainWindow):
         self.status_bar.show_message(
             "受限模式 · 笔记库可用，语义检索与导入已禁用（点击状态栏重试检测）", 0
         )
-        self.status_bar.set_ollama_status(False)
+        self.status_bar.set_ollama_status(False, label)
         self.status_bar.set_degraded(True)
 
     def _on_retry_capabilities(self) -> None:
@@ -525,10 +530,9 @@ class MainWindow(QMainWindow):
             self.top_nav_bar.set_import_enabled(True)
             self.detail_panel.set_search_enabled(True)
             self.status_bar.set_degraded(False)
-            self.status_bar.set_backend_label(
-                "llama.cpp" if caps.backend_type == "llama_cpp" else "Ollama"
-            )
-            self.status_bar.set_ollama_status(self.embedder.is_available())
+            label = self._backend_display_label()
+            self.status_bar.set_backend_label(label)
+            self.status_bar.set_ollama_status(self.embedder.is_available(), label)
             self.status_bar.show_message("本地运行 · 就绪")
             QMessageBox.information(self, "检测通过", caps.user_message())
 
@@ -600,7 +604,7 @@ class MainWindow(QMainWindow):
     def _refresh_status_panel(self):
         stats = self.metadata.get_stats()
         chroma_count = self.vector_store.count()
-        model_name = self.config.embedding_model.split('/')[-1]
+        model_name = getattr(self.embedder, "model_name", "") or self.config.embedding_model.split('/')[-1]
         summary = (
             f"{stats.get('total_docs', 0)} 文档 · "
             f"{stats.get('total_chunks', 0)} 块 · {model_name}"
@@ -617,8 +621,10 @@ class MainWindow(QMainWindow):
         # §3.5 工作区下拉旁展示文档数徽章
         self.top_nav_bar.set_doc_count_badge(stats.get("total_docs", 0))
 
-        # §3.6 Ollama 状态指示
-        self.status_bar.set_ollama_status(self.embedder.is_available())
+        # §3.6 后端状态指示
+        self.status_bar.set_ollama_status(
+            self.embedder.is_available(), self._backend_display_label()
+        )
 
     def _sync_doc_count_badge(self) -> None:
         """单独刷新文档数徽章（不重算完整统计）。"""

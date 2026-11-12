@@ -68,10 +68,12 @@ class ModelManager:
         """从 config 读取当前配置的模型版本。
 
         按后端类型取模型标识：ollama 用 embedding_model，
-        llama_cpp 用 GGUF 文件名。
+        llama_cpp 用 GGUF 文件名，llama_cpp_server 用服务模型别名。
         """
         if self.config.embedding_backend == "llama_cpp":
             model_id = Path(self.config.llama_cpp.model_path).name if self.config.llama_cpp.model_path else ""
+        elif self.config.embedding_backend == "llama_cpp_server":
+            model_id = self.config.llama_server.model.strip() or "llama.cpp-server"
         else:
             model_id = self.config.embedding_model
         return ModelVersionInfo(

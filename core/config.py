@@ -90,6 +90,33 @@ class LlamaCppConfig:
 
 
 @dataclass
+class LlamaServerConfig:
+    """llama.cpp server 后端配置（OpenAI 兼容 /v1/embeddings）。"""
+
+    base_url: str = "http://127.0.0.1:8001"
+    model: str = ""
+    """服务中的模型别名；留空时使用服务加载的唯一模型。"""
+
+    timeout: int = 120
+    """单次嵌入请求超时（秒）。"""
+
+    def validate(self, backend: str) -> list[str]:
+        errors: list[str] = []
+        if backend != "llama_cpp_server":
+            return errors
+        base = self.base_url.strip()
+        if not base:
+            errors.append(
+                "llama_server.base_url must not be empty when backend is llama_cpp_server"
+            )
+        elif not base.startswith(("http://", "https://")):
+            errors.append("llama_server.base_url must start with http:// or https://")
+        if self.timeout <= 0:
+            errors.append(f"llama_server.timeout must be > 0, got {self.timeout}")
+        return errors
+
+
+@dataclass
 class Config:
     files_dir: Path = Path("./data/files")
     chroma_dir: Path = Path("./data/chroma_db")
@@ -102,6 +129,7 @@ class Config:
     embedding_batch_size: int = 32
     embedding_backend: str = "ollama"
     llama_cpp: LlamaCppConfig = field(default_factory=LlamaCppConfig)
+    llama_server: LlamaServerConfig = field(default_factory=LlamaServerConfig)
     top_k: int = 5
     similarity_threshold: float = 0.5
     mcp_enabled: bool = False
@@ -153,11 +181,13 @@ class Config:
             )
         errors.extend(self.hybrid_search.validate())
         errors.extend(self.workspaces.validate())
-        if self.embedding_backend not in ("ollama", "llama_cpp"):
+        if self.embedding_backend not in ("ollama", "llama_cpp", "llama_cpp_server"):
             errors.append(
-                f"embedding_backend must be 'ollama' or 'llama_cpp', got '{self.embedding_backend}'"
+                "embedding_backend must be 'ollama', 'llama_cpp' or "
+                f"'llama_cpp_server', got '{self.embedding_backend}'"
             )
         errors.extend(self.llama_cpp.validate(self.embedding_backend))
+        errors.extend(self.llama_server.validate(self.embedding_backend))
         valid_connector_types = {"local_dir", "github", "notion", "feishu"}
         for i, c in enumerate(self.connectors):
             if not isinstance(c, dict):
@@ -212,6 +242,10 @@ class Config:
         # Parse nested llama_cpp config
         if "llama_cpp" in data and isinstance(data["llama_cpp"], dict):
             data["llama_cpp"] = LlamaCppConfig(**data["llama_cpp"])
+
+        # Parse nested llama_server config
+        if "llama_server" in data and isinstance(data["llama_server"], dict):
+            data["llama_server"] = LlamaServerConfig(**data["llama_server"])
 
         cfg = cls(**data)
         cfg.files_dir.mkdir(parents=True, exist_ok=True)

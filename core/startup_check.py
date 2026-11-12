@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass
 
 import ollama
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,9 @@ class StartupChecker:
         if self.config.embedding_backend == "llama_cpp":
             results.append(self._check_llama_cpp_dependency())
             results.append(self._check_gguf_model())
+        elif self.config.embedding_backend == "llama_cpp_server":
+            results.append(self._check_llama_server())
+            results.append(self._check_llama_server_model())
         else:
             results.append(self._check_ollama_service())
             results.append(self._check_embedding_model())
@@ -188,4 +192,80 @@ class StartupChecker:
             name="GGUF 模型",
             passed=True,
             message=f"GGUF 模型就绪: {path}",
+        )
+
+    def _check_llama_server(self) -> CheckResult:
+        """检查 llama.cpp server 是否可访问。"""
+        base_url = self.config.llama_server.base_url.strip().rstrip("/")
+        try:
+            resp = requests.get(f"{base_url}/health", timeout=5)
+            if resp.status_code == 200:
+                return CheckResult(
+                    name="llama.cpp 服务",
+                    passed=True,
+                    message=f"llama.cpp 服务正常运行: {base_url}",
+                )
+            return CheckResult(
+                name="llama.cpp 服务",
+                passed=False,
+                message=f"llama.cpp 服务返回 HTTP {resp.status_code}: {base_url}",
+                suggestion="请确认 llama-server 以 --embedding 参数启动",
+            )
+        except Exception as e:
+            return CheckResult(
+                name="llama.cpp 服务",
+                passed=False,
+                message=f"无法连接 llama.cpp 服务 {base_url}: {e}",
+                suggestion=(
+                    "请先启动 llama-server，例如："
+                    "llama-server -m bge-m3.gguf --embedding --port 8001"
+                ),
+            )
+
+    def _check_llama_server_model(self) -> CheckResult:
+        """检查 llama.cpp server 是否加载了可用的嵌入模型。"""
+        base_url = self.config.llama_server.base_url.strip().rstrip("/")
+        target = self.config.llama_server.model.strip()
+        try:
+            resp = requests.get(f"{base_url}/v1/models", timeout=5)
+            resp.raise_for_status()
+            models = [
+                m.get("id") for m in resp.json().get("data", []) if m.get("id")
+            ]
+        except Exception as e:
+            return CheckResult(
+                name="嵌入模型",
+                passed=False,
+                message=f"读取 llama.cpp 模型列表失败: {e}",
+                suggestion="请确认 llama-server 服务正常且已加载嵌入模型",
+            )
+
+        if not models:
+            return CheckResult(
+                name="嵌入模型",
+                passed=False,
+                message="llama.cpp 服务未加载任何模型",
+                suggestion="请使用 -m 指定 GGUF 模型并加上 --embedding 参数",
+            )
+
+        if target:
+            if target in models:
+                return CheckResult(
+                    name="嵌入模型",
+                    passed=True,
+                    message=f"模型 {target} 已就绪",
+                )
+            return CheckResult(
+                name="嵌入模型",
+                passed=False,
+                message=(
+                    f"模型 {target} 未在服务中加载，当前可用: {', '.join(models)}"
+                ),
+                suggestion="请检查设置中的模型别名，或留空以使用服务默认模型",
+            )
+
+        return CheckResult(
+            name="嵌入模型",
+            passed=True,
+            message=f"模型 {models[0]} 已就绪",
         )

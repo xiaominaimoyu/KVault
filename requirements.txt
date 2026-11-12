@@ -9,6 +9,7 @@ openpyxl>=3.1.0
 python-pptx>=0.6.21
 ollama>=0.3.0
 mcp>=1.0.0
+requests>=2.31.0
 numpy>=1.26.0
 
 # 可选依赖（不安装也能正常运行，仅相关解析能力降级）

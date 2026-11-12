@@ -144,7 +144,8 @@ class SettingsDialog(QDialog):
 
         self.backend_combo = QComboBox()
         self.backend_combo.addItem("Ollama", "ollama")
-        self.backend_combo.addItem("llama.cpp", "llama_cpp")
+        self.backend_combo.addItem("llama.cpp（进程内）", "llama_cpp")
+        self.backend_combo.addItem("llama.cpp 服务", "llama_cpp_server")
         backend_idx = self.backend_combo.findData(self.config.embedding_backend)
         if backend_idx >= 0:
             self.backend_combo.setCurrentIndex(backend_idx)
@@ -182,6 +183,23 @@ class SettingsDialog(QDialog):
         self.n_ctx.setValue(self.config.llama_cpp.n_ctx)
         llama_form.addRow("上下文长度", self.n_ctx)
         self.config_stack.addWidget(llama_cpp_panel)
+
+        # llama.cpp 服务（OpenAI 兼容 /v1/embeddings）
+        server_panel = QWidget()
+        server_form = _form(server_panel)
+        self.server_url = QLineEdit(self.config.llama_server.base_url)
+        self.server_url.setPlaceholderText("http://127.0.0.1:8001")
+        server_form.addRow("Base URL", self.server_url)
+
+        self.server_model = QLineEdit(self.config.llama_server.model)
+        self.server_model.setPlaceholderText("留空则自动使用服务加载的模型")
+        server_form.addRow("模型别名", self.server_model)
+
+        self.server_timeout = QSpinBox()
+        self.server_timeout.setRange(5, 600)
+        self.server_timeout.setValue(self.config.llama_server.timeout)
+        server_form.addRow("请求超时（秒）", self.server_timeout)
+        self.config_stack.addWidget(server_panel)
 
         self.config_stack.setCurrentIndex(self.backend_combo.currentIndex())
         form.addRow(self.config_stack)
@@ -303,6 +321,33 @@ class SettingsDialog(QDialog):
                 self.backend_status_label.setStyleSheet(
                     f"color: {tokens['status-error']};"
                 )
+        elif backend == "llama_cpp_server":
+            from core.embedding_backends.llama_server_backend import (
+                LlamaServerBackend,
+            )
+
+            tmp = LlamaServerBackend(
+                base_url=self.server_url.text().strip(),
+                model=self.server_model.text().strip(),
+                timeout=min(self.server_timeout.value(), 10),
+            )
+            if not tmp.is_available():
+                self.backend_status_label.setText(
+                    f"✗ 无法连接 llama.cpp 服务: {self.server_url.text().strip()}"
+                )
+                self.backend_status_label.setStyleSheet(
+                    f"color: {tokens['status-error']};"
+                )
+            elif not tmp.is_model_available():
+                self.backend_status_label.setText("✗ 服务中没有指定模型")
+                self.backend_status_label.setStyleSheet(
+                    f"color: {tokens['status-error']};"
+                )
+            else:
+                self.backend_status_label.setText("✓ llama.cpp 服务就绪")
+                self.backend_status_label.setStyleSheet(
+                    f"color: {tokens['status-success']};"
+                )
         else:
             self.backend_status_label.setText("Ollama 后端（需启动 Ollama 服务）")
             self.backend_status_label.setStyleSheet(f"color: {tokens['fg-muted']};")
@@ -332,6 +377,10 @@ class SettingsDialog(QDialog):
             self.config.llama_cpp.model_path = self.gguf_path.text().strip()
             self.config.llama_cpp.n_gpu_layers = self.n_gpu_layers.value()
             self.config.llama_cpp.n_ctx = self.n_ctx.value()
+        elif self.config.embedding_backend == "llama_cpp_server":
+            self.config.llama_server.base_url = self.server_url.text().strip()
+            self.config.llama_server.model = self.server_model.text().strip()
+            self.config.llama_server.timeout = self.server_timeout.value()
 
         self.config.chunk_size = self.chunk_size.value()
         self.config.chunk_overlap = self.chunk_overlap.value()

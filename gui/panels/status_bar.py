@@ -66,6 +66,7 @@ class StatusBar(QWidget):
         self._ollama_label = QLabel("Ollama")
         self._ollama_label.setStyleSheet("font-size: 11px;")
         layout.addWidget(self._ollama_label)
+        self._backend_label = "Ollama"
 
     def set_status(self, text: str, color_key: str = "pending"):
         self._status_label.setText(text)
@@ -82,13 +83,16 @@ class StatusBar(QWidget):
     def show_progress(self, visible: bool):
         self._progress_bar.setVisible(visible)
 
-    def set_ollama_status(self, connected: bool):
+    def set_ollama_status(self, connected: bool, label: str | None = None):
+        if label:
+            self._backend_label = label
+        name = self._backend_label
         if connected:
             self._ollama_dot.set_status("success")
-            self._ollama_label.setText("Ollama ✓")
+            self._ollama_label.setText(f"{name} ✓")
         else:
             self._ollama_dot.set_status("error")
-            self._ollama_label.setText("Ollama ✗")
+            self._ollama_label.setText(f"{name} ✗")
 
     def set_backend_label(self, text: str) -> None:
         """把后端指示改写为实际使用的后端名（Ollama / llama.cpp）。
@@ -96,6 +100,7 @@ class StatusBar(QWidget):
         使用 llama.cpp 时显示「模型」而非「Ollama」，否则会误导用户以为
         需要额外启动 Ollama 服务。
         """
+        self._backend_label = text
         self._ollama_label.setText(text)
 
     def set_degraded(self, degraded: bool) -> None:

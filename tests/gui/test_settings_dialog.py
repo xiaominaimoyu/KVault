@@ -14,6 +14,12 @@ class _LlamaCppCfg:
     n_ctx = 2048
 
 
+class _LlamaServerCfg:
+    base_url = "http://127.0.0.1:8001"
+    model = ""
+    timeout = 120
+
+
 class _HybridCfg:
     enabled = True
 
@@ -25,6 +31,7 @@ def _make_config(**overrides):
         ollama_base_url="http://localhost:11434",
         embedding_model="nomic-embed-text",
         llama_cpp=_LlamaCppCfg(),
+        llama_server=_LlamaServerCfg(),
         chunk_size=800,
         chunk_overlap=100,
         top_k=5,

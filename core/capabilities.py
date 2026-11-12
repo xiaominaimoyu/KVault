@@ -91,8 +91,8 @@ class Capabilities:
             lines.extend(f"· {reason}" for reason in self.reasons)
         lines.append("")
         lines.append(
-            "配置方式：设置 → 模型，选择 Ollama 或 llama.cpp 后端；"
-            "完成后点击状态栏的「重试检测」。"
+            "配置方式：设置 → 模型，选择 Ollama、llama.cpp（进程内）或 "
+            "llama.cpp 服务；完成后点击状态栏的「重试检测」。"
         )
         return "\n".join(lines)
 
@@ -117,6 +117,8 @@ def probe(config) -> Capabilities:
     # 嵌入相关的检查项：后端不同，检查名称不同
     if backend == "llama_cpp":
         relevant = {"llama.cpp 依赖", "GGUF 模型"}
+    elif backend == "llama_cpp_server":
+        relevant = {"llama.cpp 服务", "嵌入模型"}
     else:
         relevant = {"Ollama 服务", "嵌入模型"}
 
@@ -145,4 +147,6 @@ def _describe_backend(config) -> str:
 
         path = config.llama_cpp.model_path
         return Path(path).name if path else "GGUF"
+    if getattr(config, "embedding_backend", "ollama") == "llama_cpp_server":
+        return config.llama_server.model.strip() or config.llama_server.base_url
     return config.embedding_model
